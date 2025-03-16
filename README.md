@@ -1,6 +1,10 @@
-# OdinTracker
+# ForsetiScan
 
-OdinTracker is a modern web application that helps you track and follow successful token creators on Odin.fun. The app allows you to identify top creators based on various performance metrics and stay updated with their latest tokens.
+ForsetiScan is a modern web application that helps you track and follow successful token creators on Odin.fun. Named after Forseti, the Norse god of justice and reconciliation, this app aims to promote fairness and transparency by identifying the most successful and trustworthy token creators.
+
+## About Forseti
+
+In Norse mythology, Forseti is the god of justice, reconciliation, and truth. As the son of Baldr and Nanna, he presides over disputes and makes fair judgments. His hall, Glitnir, has pillars of gold and a roof of silver, symbolizing the purity and value of justice. ForsetiScan embodies these principles by providing transparent metrics to evaluate token creators.
 
 ## Features
 
@@ -21,8 +25,8 @@ OdinTracker is a modern web application that helps you track and follow successf
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/odin-tracker.git
-   cd odin-tracker
+   git clone https://github.com/yourusername/forseti-scan.git
+   cd forseti-scan
    ```
 
 2. Install dependencies:

@@ -14,6 +14,7 @@ export interface Token {
   icrc_ledger: string;
   price: number; // Raw price from API
   price_in_sats?: number; // Converted price in sats (optional)
+  price_change_24h?: number; // Price change percentage in the last 24 hours
   marketcap: number;
   rune: string;
   featured: boolean;
@@ -108,10 +109,6 @@ export interface CreatorPerformance {
   rank?: number;
   totalHolders?: number;
   totalTrades?: number;
-  avgTokenAge?: number;
-  highestTokenPrice?: number;
-  buySellRatio?: number;
-  totalMarketcap?: number;
   tokens: Token[];
   lastTokenCreated?: string;
 }
@@ -139,6 +136,12 @@ export const convertVolumeToBTC = (volume: number): number => {
   return volume / 100000000;
 };
 
+// Convert raw marketcap to BTC
+export const convertMarketcapToBTC = (marketcap: number): number => {
+  // Raw marketcap is in sats, divide by 10^8 to get BTC
+  return marketcap / 100000000;
+};
+
 // Get current BTC price in USD
 export const getBTCPrice = async (): Promise<number> => {
   try {
@@ -146,34 +149,91 @@ export const getBTCPrice = async (): Promise<number> => {
     return response.data.bitcoin.usd;
   } catch (error) {
     console.error('Error fetching BTC price:', error);
-    return 83000; // Fallback price if API fails
+    return 84000; // Fallback price if API fails
   }
 };
 
 // Convert BTC volume to USD
-export const convertBTCToUSD = async (btcVolume: number): Promise<number> => {
+export const convertBTCToUSD = async (btcAmount: number): Promise<number> => {
   const btcPrice = await getBTCPrice();
-  return btcVolume * btcPrice;
+  return btcAmount * btcPrice;
 };
 
 // Format volume for display
-export const formatVolume = (volume: number): string => {
-  const btcVolume = convertVolumeToBTC(volume);
+export const formatVolume = (volume: number, inUSD = false): string => {
+  // Divide by 1000 to get correct value
+  const btcVolume = convertVolumeToBTC(volume) / 1000;
   
-  if (btcVolume >= 1000) {
-    return `${(btcVolume / 1000).toFixed(1)}K BTC`;
-  } else if (btcVolume >= 1) {
-    return `${btcVolume.toFixed(1)} BTC`;
-  } else if (btcVolume >= 0.001) {
-    return `${btcVolume.toFixed(3)} BTC`;
+  if (inUSD) {
+    // For USD display
+    const usdValue = btcVolume * 84000; // Use fallback BTC price
+    
+    if (usdValue >= 1000000) {
+      return `$${(usdValue / 1000000).toFixed(1)}M`;
+    } else if (usdValue >= 1000) {
+      return `$${(usdValue / 1000).toFixed(1)}K`;
+    } else {
+      return `$${usdValue.toFixed(0)}`;
+    }
   } else {
-    return `${(volume / 1000000).toFixed(2)}M sats`;
+    // For BTC display
+    if (btcVolume >= 1000) {
+      return `${(btcVolume / 1000).toFixed(1)}K BTC`;
+    } else if (btcVolume >= 1) {
+      return `${btcVolume.toFixed(1)} BTC`;
+    } else if (btcVolume >= 0.001) {
+      return `${btcVolume.toFixed(3)} BTC`;
+    } else {
+      return `${(volume / 1000000 / 1000).toFixed(2)}M sats`;
+    }
+  }
+};
+
+// Format marketcap for display
+export const formatMarketcap = (marketcap: number, inUSD = false): string => {
+  // Divide by 1000 to get correct value
+  const btcMarketcap = convertMarketcapToBTC(marketcap) / 1000;
+  
+  if (inUSD) {
+    // For USD display
+    const usdValue = btcMarketcap * 84000; // Use fallback BTC price
+    
+    if (usdValue >= 1000000) {
+      return `$${(usdValue / 1000000).toFixed(1)}M`;
+    } else if (usdValue >= 1000) {
+      return `$${(usdValue / 1000).toFixed(1)}K`;
+    } else {
+      return `$${usdValue.toFixed(0)}`;
+    }
+  } else {
+    // For BTC display
+    if (btcMarketcap >= 1000) {
+      return `${(btcMarketcap / 1000).toFixed(1)}K BTC`;
+    } else if (btcMarketcap >= 1) {
+      return `${btcMarketcap.toFixed(1)} BTC`;
+    } else {
+      return `${btcMarketcap.toFixed(3)} BTC`;
+    }
   }
 };
 
 // Check if a token is active based on price and last activity
 export const isTokenActive = (token: Token): boolean => {
-  const priceInSats = token.price_in_sats || convertPriceToSats(token.price);
+  // Calculate price in sats if not already done
+  if (!token.price_in_sats) {
+    token.price_in_sats = convertPriceToSats(token.price);
+  }
+  
+  // Calculate price change percentage if price_1d is available
+  if (token.price_1d && token.price_1d > 0) {
+    const currentPrice = token.price;
+    const previousPrice = token.price_1d;
+    token.price_change_24h = ((currentPrice - previousPrice) / previousPrice) * 100;
+  } else {
+    token.price_change_24h = 0;
+  }
+  
+  const priceInSats = token.price_in_sats;
   const lastActionDate = new Date(token.last_action_time);
   const eightDaysAgo = new Date();
   eightDaysAgo.setDate(eightDaysAgo.getDate() - 8);
@@ -312,21 +372,6 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
     let activeTokens = 0;
     let totalHolders = 0;
     let totalTrades = 0;
-    let totalMarketcap = 0;
-    let avgTokenAge = 0;
-    let highestTokenPrice = 0;
-    let totalBuyCount = 0;
-    let totalSellCount = 0;
-    
-    // Calculate token age in days
-    const now = new Date();
-    const tokenAges = tokens.map(token => {
-      const createdDate = new Date(token.created_time);
-      return (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24); // days
-    });
-    
-    // Average token age
-    avgTokenAge = tokenAges.reduce((sum, age) => sum + age, 0) / tokens.length;
     
     tokens.forEach(token => {
       if (token.volume > 0) {
@@ -338,23 +383,11 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
       }
       
       totalHolders += token.holder_count || 0;
-      totalBuyCount += token.buy_count || 0;
-      totalSellCount += token.sell_count || 0;
       totalTrades += (token.buy_count || 0) + (token.sell_count || 0);
-      totalMarketcap += token.marketcap || 0;
-      
-      // Track highest token price
-      const tokenPrice = token.price_in_sats || convertPriceToSats(token.price);
-      if (tokenPrice > highestTokenPrice) {
-        highestTokenPrice = tokenPrice;
-      }
     });
     
     // Calculate success rate based on active tokens
     const successRate = tokens.length > 0 ? (activeTokens / tokens.length) * 100 : 0;
-    
-    // Calculate buy/sell ratio (higher is better, balanced around 1.0)
-    const buySellRatio = totalSellCount > 0 ? totalBuyCount / totalSellCount : totalBuyCount > 0 ? 2 : 1;
     
     // Calculate weighted score (combines volume and active tokens)
     const volumeWeight = 0.6;
@@ -371,21 +404,18 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
     const weightedScore = (normalizedVolume * volumeWeight) + (normalizedActiveTokens * activeTokenWeight);
     
     // Calculate confidence score (0-100) with different weights for each factor
-    const successWeight = 0.35;     // 35% weight for success rate
-    const volumeWeight2 = 0.20;     // 20% weight for volume
-    const holdersWeight = 0.15;     // 15% weight for holders
-    const tradesWeight = 0.10;      // 10% weight for trades
-    const ageWeight = 0.05;         // 5% weight for token age
-    const marketcapWeight = 0.05;   // 5% weight for marketcap
-    const priceWeight = 0.05;       // 5% weight for highest price
-    const buySellWeight = 0.05;     // 5% weight for buy/sell ratio
+    // Success rate is most important, followed by volume, holders, and trades
+    const successWeight = 0.70;  // 70% weight for success rate
+    const volumeWeight2 = 0.20;  // 20% weight for volume
+    const holdersWeight = 0.08;  // 8% weight for holders
+    const tradesWeight = 0.02;   // 2% weight for trades
     
     // Calculate individual scores
     const successScore = Math.min(100, successRate);
     
     // Volume score - logarithmic scale to handle wide range of volumes
-    // 10B sats (100 BTC) would be a perfect score
-    const volumeScore = Math.min(100, Math.log10(totalVolume + 1) * 8.33);
+    // 1B sats (10 BTC) would be a perfect score
+    const volumeScore = Math.min(100, Math.log10(totalVolume + 1) * 10);
     
     // Holders score - logarithmic scale
     // 1000 holders would be a perfect score
@@ -395,35 +425,12 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
     // 1000 trades would be a perfect score
     const tradesScore = Math.min(100, Math.log10(totalTrades + 1) * 33.3);
     
-    // Age score - older is better, up to 180 days (6 months)
-    const ageScore = Math.min(100, (avgTokenAge / 180) * 100);
-    
-    // Marketcap score - logarithmic scale
-    // 10B sats (100 BTC) would be a perfect score
-    const marketcapScore = Math.min(100, Math.log10(totalMarketcap + 1) * 8.33);
-    
-    // Price score - logarithmic scale
-    // 10,000 sats would be a perfect score
-    const priceScore = Math.min(100, (Math.log10(highestTokenPrice + 1) / Math.log10(10000)) * 100);
-    
-    // Buy/sell ratio score - balanced around 1.0 (equal buys and sells)
-    // Optimal range is 0.8 to 1.2 (80% to 120%)
-    const buySellScore = buySellRatio >= 0.8 && buySellRatio <= 1.2 
-      ? 100 // Perfect balance
-      : buySellRatio > 1.2 
-        ? Math.max(0, 100 - ((buySellRatio - 1.2) * 50)) // Too many buys
-        : Math.max(0, 100 - ((0.8 - buySellRatio) * 100)); // Too many sells
-    
-    // Calculate final confidence score and ensure it doesn't exceed 100%
+    // Calculate final confidence score without random factor
     let confidenceScore = (
       (successScore * successWeight) +
       (volumeScore * volumeWeight2) +
       (holdersScore * holdersWeight) +
-      (tradesScore * tradesWeight) +
-      (ageScore * ageWeight) +
-      (marketcapScore * marketcapWeight) +
-      (priceScore * priceWeight) +
-      (buySellScore * buySellWeight)
+      (tradesScore * tradesWeight)
     );
     
     // Cap confidence score at 100
@@ -435,8 +442,17 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
     );
     const lastTokenCreated = sortedByCreationTime.length > 0 ? sortedByCreationTime[0].created_time : undefined;
     
-    // Calculate BTC volume for display
-    const btcVolume = convertVolumeToBTC(totalVolume);
+    // Calculate BTC volume for display (divide by 1000 to get correct value)
+    const btcVolume = convertVolumeToBTC(totalVolume) / 1000;
+    
+    // Log the confidence score components for debugging
+    console.log(`Confidence score for ${user.username}:`, {
+      successScore: successScore.toFixed(2),
+      volumeScore: volumeScore.toFixed(2),
+      holdersScore: holdersScore.toFixed(2),
+      tradesScore: tradesScore.toFixed(2),
+      finalScore: confidenceScore.toFixed(2)
+    });
     
     return {
       principal,
@@ -451,10 +467,6 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
       confidenceScore,
       totalHolders,
       totalTrades,
-      avgTokenAge,
-      highestTokenPrice,
-      buySellRatio,
-      totalMarketcap,
       lastTokenCreated,
       tokens: tokens.sort((a, b) => {
         const priceA = a.price_in_sats || a.price / 1000;
@@ -488,16 +500,69 @@ export type CreatorSortOption = 'volume' | 'active' | 'weighted' | 'confidence' 
 // Bob's principal ID
 const BOB_PRINCIPAL = 'bob-principal';
 
+// Session storage key for creators cache
+const CREATORS_CACHE_KEY = 'forseti_creators_cache';
+const CREATORS_CACHE_TIMESTAMP_KEY = 'forseti_creators_cache_timestamp';
+const CACHE_EXPIRY_TIME = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+// Helper function to retry API calls
+const retryApiCall = async <T>(
+  apiCall: () => Promise<T>,
+  maxRetries = 3,
+  delay = 1000
+): Promise<T> => {
+  let lastError: any;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiCall();
+    } catch (error) {
+      console.error(`API call failed (attempt ${attempt}/${maxRetries}):`, error);
+      lastError = error;
+      
+      if (attempt < maxRetries) {
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delay * attempt));
+      }
+    }
+  }
+  
+  throw lastError;
+};
+
 // Find top creators based on their token performance
 export const findTopCreators = async (
-  limit = 100, 
+  limit = 200, 
   sortBy: CreatorSortOption = 'confidence'
 ): Promise<CreatorPerformance[]> => {
   try {
-    // Use the direct API endpoint to get top tokens
-    const response = await axios.get(
-      `${API_BASE_URL}/tokens?sort=marketcap%3Adesc&page=1&limit=30`
+    // Check if we have cached data in session storage
+    const cachedData = sessionStorage.getItem(CREATORS_CACHE_KEY);
+    const cachedTimestamp = sessionStorage.getItem(CREATORS_CACHE_TIMESTAMP_KEY);
+    
+    // If we have cached data and it's not expired, use it
+    if (cachedData && cachedTimestamp) {
+      const timestamp = parseInt(cachedTimestamp, 10);
+      const now = Date.now();
+      
+      // Check if cache is still valid (not expired)
+      if (now - timestamp < CACHE_EXPIRY_TIME) {
+        console.log('Using cached creators data from session storage');
+        const parsedData = JSON.parse(cachedData);
+        
+        // Sort the cached data based on the requested sort option
+        return sortCreatorsData(parsedData, sortBy, limit);
+      }
+    }
+    
+    // If no valid cache, fetch fresh data
+    console.log('Fetching fresh creators data from API');
+    
+    // Use the direct API endpoint to get top tokens with retry logic
+    const response = await retryApiCall(() => 
+      axios.get(`${API_BASE_URL}/tokens?sort=marketcap%3Adesc&page=1&limit=200`)
     );
+    
     const topTokens = response.data.data || [];
     
     console.log(`Fetched ${topTokens.length} top tokens by marketcap`);
@@ -526,48 +591,71 @@ export const findTopCreators = async (
     
     console.log(`Successfully calculated performance for ${validPerformances.length} creators`);
     
-    // Sort based on selected criteria
-    let sortedPerformances: CreatorPerformance[];
-    switch (sortBy) {
-      case 'volume':
-        sortedPerformances = validPerformances.sort((a, b) => b.totalVolume - a.totalVolume);
-        break;
-      case 'active':
-        sortedPerformances = validPerformances.sort((a, b) => b.activeTokens - a.activeTokens);
-        break;
-      case 'weighted':
-        sortedPerformances = validPerformances.sort((a, b) => b.weightedScore - a.weightedScore);
-        break;
-      case 'confidence':
-        sortedPerformances = validPerformances.sort((a, b) => b.confidenceScore - a.confidenceScore);
-        break;
-      case 'success':
-        sortedPerformances = validPerformances.sort((a, b) => b.successRate - a.successRate);
-        break;
-      case 'tokens':
-        sortedPerformances = validPerformances.sort((a, b) => b.totalTokens - a.totalTokens);
-        break;
-      case 'holders':
-        sortedPerformances = validPerformances.sort((a, b) => {
-          const aHolders = a.totalHolders || 0;
-          const bHolders = b.totalHolders || 0;
-          return bHolders - aHolders;
-        });
-        break;
-      default:
-        sortedPerformances = validPerformances.sort((a, b) => b.confidenceScore - a.confidenceScore);
-    }
+    // Cache the data in session storage
+    sessionStorage.setItem(CREATORS_CACHE_KEY, JSON.stringify(validPerformances));
+    sessionStorage.setItem(CREATORS_CACHE_TIMESTAMP_KEY, Date.now().toString());
     
-    // Add ranking and calculate total holders
-    return sortedPerformances.slice(0, limit).map((perf, index) => ({
-      ...perf,
-      rank: index + 1,
-      totalHolders: perf.totalHolders || perf.tokens.reduce((sum, t) => sum + t.holder_count, 0)
-    }));
+    // Sort and return the data
+    return sortCreatorsData(validPerformances, sortBy, limit);
   } catch (error) {
     console.error('Error finding top creators:', error);
+    
+    // If API fails, try to use cached data even if expired
+    const cachedData = sessionStorage.getItem(CREATORS_CACHE_KEY);
+    if (cachedData) {
+      console.log('API failed, using cached creators data as fallback');
+      const parsedData = JSON.parse(cachedData);
+      return sortCreatorsData(parsedData, sortBy, limit);
+    }
+    
     return [];
   }
+};
+
+// Helper function to sort creators data
+const sortCreatorsData = (
+  creators: CreatorPerformance[], 
+  sortBy: CreatorSortOption, 
+  limit: number
+): CreatorPerformance[] => {
+  // Sort based on selected criteria
+  let sortedPerformances: CreatorPerformance[];
+  switch (sortBy) {
+    case 'volume':
+      sortedPerformances = creators.sort((a, b) => b.totalVolume - a.totalVolume);
+      break;
+    case 'active':
+      sortedPerformances = creators.sort((a, b) => b.activeTokens - a.activeTokens);
+      break;
+    case 'weighted':
+      sortedPerformances = creators.sort((a, b) => b.weightedScore - a.weightedScore);
+      break;
+    case 'confidence':
+      sortedPerformances = creators.sort((a, b) => b.confidenceScore - a.confidenceScore);
+      break;
+    case 'success':
+      sortedPerformances = creators.sort((a, b) => b.successRate - a.successRate);
+      break;
+    case 'tokens':
+      sortedPerformances = creators.sort((a, b) => b.totalTokens - a.totalTokens);
+      break;
+    case 'holders':
+      sortedPerformances = creators.sort((a, b) => {
+        const aHolders = a.totalHolders || 0;
+        const bHolders = b.totalHolders || 0;
+        return bHolders - aHolders;
+      });
+      break;
+    default:
+      sortedPerformances = creators.sort((a, b) => b.confidenceScore - a.confidenceScore);
+  }
+  
+  // Add ranking and calculate total holders
+  return sortedPerformances.slice(0, limit).map((perf, index) => ({
+    ...perf,
+    rank: index + 1,
+    totalHolders: perf.totalHolders || perf.tokens.reduce((sum, t) => sum + t.holder_count, 0)
+  }));
 };
 
 // Fetch Bob's data specifically
@@ -988,12 +1076,12 @@ export const searchTokens = async (query: string, limit = 30): Promise<Token[]> 
 
 // Get rarity level based on confidence score
 export const getRarityLevel = (score: number): string => {
-  if (score >= 95) return 'legendary';   // Gold
-  if (score >= 85) return 'epic';        // Purple
-  if (score >= 75) return 'rare';        // Blue
-  if (score >= 65) return 'uncommon';    // Green
-  if (score >= 55) return 'common';      // White
-  if (score >= 45) return 'basic';       // Gray
-  if (score >= 35) return 'novice';      // Brown
-  return 'beginner';                     // Red
+  if (score >= 100) return 'legendary';   // Gold - only perfect 100%
+  if (score >= 90) return 'epic';         // Purple
+  if (score >= 80) return 'great';        // Blue
+  if (score >= 70) return 'okay';         // Green
+  if (score >= 60) return 'neutral';      // White
+  if (score >= 45) return 'meh';          // Gray
+  if (score >= 30) return 'scam';         // Brown
+  return 'scam';                          // Red
 }; 

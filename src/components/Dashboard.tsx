@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, ChangeEvent } from 'react'
 import { findTopCreators, CreatorPerformance, CreatorSortOption, fetchBobData } from '../services/api'
 import CreatorCard from './CreatorCard'
 
@@ -11,6 +11,14 @@ export function Dashboard() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [followedCreatorsCount, setFollowedCreatorsCount] = useState(0)
   const [activeTab, setActiveTab] = useState<'top' | 'followed'>('top')
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [creatorsPerPage, setCreatorsPerPage] = useState(20)
+  const [paginatedCreators, setPaginatedCreators] = useState<CreatorPerformance[]>([])
+  const [totalPages, setTotalPages] = useState(1)
 
   // Update followed creators count when localStorage changes
   useEffect(() => {
@@ -31,7 +39,12 @@ export function Dashboard() {
 
   // Load creators on initial render
   useEffect(() => {
-    loadCreators()
+    // Use a small timeout to ensure the component is fully mounted
+    const timer = setTimeout(() => {
+      loadCreators(false)
+    }, 100)
+    
+    return () => clearTimeout(timer)
   }, [])
 
   // Sort creators when sortBy, sortDirection, or creators change
@@ -48,20 +61,53 @@ export function Dashboard() {
     }
   }, [activeTab, creators])
 
-  const loadCreators = async () => {
+  // Update paginated creators when displayedCreators or currentPage changes
+  useEffect(() => {
+    updatePaginatedCreators()
+  }, [displayedCreators, currentPage, creatorsPerPage])
+
+  // Check for cached timestamp
+  useEffect(() => {
+    const cachedTimestamp = sessionStorage.getItem('forseti_creators_cache_timestamp')
+    if (cachedTimestamp) {
+      setLastUpdated(new Date(parseInt(cachedTimestamp, 10)))
+    }
+  }, [])
+
+  // Update filtered creators when search query changes
+  useEffect(() => {
+    if (creators.length > 0) {
+      filterCreators()
+    }
+  }, [searchQuery, creators])
+
+  const loadCreators = async (forceRefresh = false) => {
+    // Create a flag to track if the component is still mounted
+    let isMounted = true;
+    
     try {
       setLoading(true)
       setError(null)
       
       console.log('Loading creators...')
-      // Load creators
-      const topCreators = await findTopCreators(100, 'confidence')
+      
+      // If forceRefresh is true, clear the cache
+      if (forceRefresh) {
+        sessionStorage.removeItem('forseti_creators_cache')
+        sessionStorage.removeItem('forseti_creators_cache_timestamp')
+      }
+      
+      // Load creators with a higher limit to show more developers
+      const topCreators = await findTopCreators(200, 'confidence')
       console.log(`Loaded ${topCreators.length} creators`)
+      
+      // Check if component is still mounted before updating state
+      if (!isMounted) return;
       
       // Try to fetch Bob's data specifically
       try {
         const bobData = await fetchBobData()
-        if (bobData) {
+        if (bobData && isMounted) {
           // Check if Bob is already in the list
           const bobIndex = topCreators.findIndex(c => c.principal === bobData.principal)
           
@@ -79,18 +125,62 @@ export function Dashboard() {
         console.error('Error fetching Bob data:', bobError)
       }
       
+      // Check if component is still mounted before updating state
+      if (!isMounted) return;
+      
       if (topCreators.length === 0) {
         setError('No creators found. Please try again later.')
       } else {
         setCreators(topCreators)
         console.log(`Set ${topCreators.length} creators in state`)
+        
+        // Update last updated timestamp
+        const now = new Date()
+        setLastUpdated(now)
+        
+        // Store timestamp in session storage
+        sessionStorage.setItem('forseti_creators_cache_timestamp', now.getTime().toString())
       }
     } catch (err) {
       console.error('Error loading creators:', err)
-      setError('Failed to load creators')
+      // Check if component is still mounted before updating state
+      if (isMounted) {
+        setError('Failed to load creators')
+      }
     } finally {
-      setLoading(false)
+      // Check if component is still mounted before updating state
+      if (isMounted) {
+        setLoading(false)
+      }
     }
+    
+    // Return a cleanup function that sets isMounted to false
+    return () => {
+      isMounted = false;
+    };
+  }
+
+  // Format the last updated time
+  const formatLastUpdated = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins === 1) return '1 minute ago';
+    if (diffMins < 60) return `${diffMins} minutes ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours === 1) return '1 hour ago';
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    return `${diffDays} days ago`;
+  }
+
+  const handleRefresh = () => {
+    loadCreators(true) // Always force refresh
   }
 
   const sortCreators = (sortOption: CreatorSortOption, direction: 'asc' | 'desc' = 'desc') => {
@@ -152,9 +242,33 @@ export function Dashboard() {
       setDisplayedCreators(filtered)
       console.log(`Filtered to ${filtered.length} followed creators`)
     } else {
-      setDisplayedCreators(sortedCreators)
-      console.log(`Displaying all ${sortedCreators.length} creators`)
+      // Apply search filter if search query exists
+      let filtered = sortedCreators
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim()
+        filtered = sortedCreators.filter(creator => 
+          // Search by developer name
+          creator.username.toLowerCase().includes(query) || 
+          // Search by token name
+          creator.tokens.some(token => token.name.toLowerCase().includes(query))
+        )
+        console.log(`Filtered to ${filtered.length} creators matching search: ${query}`)
+      }
+      setDisplayedCreators(filtered)
+      console.log(`Displaying ${filtered.length} creators`)
     }
+    
+    // Reset to first page when filtering changes
+    setCurrentPage(1)
+  }
+
+  const updatePaginatedCreators = () => {
+    const indexOfLastCreator = currentPage * creatorsPerPage
+    const indexOfFirstCreator = indexOfLastCreator - creatorsPerPage
+    const currentCreators = displayedCreators.slice(indexOfFirstCreator, indexOfLastCreator)
+    
+    setPaginatedCreators(currentCreators)
+    setTotalPages(Math.ceil(displayedCreators.length / creatorsPerPage))
   }
 
   const handleSortChange = (newSortBy: CreatorSortOption) => {
@@ -166,10 +280,25 @@ export function Dashboard() {
       setSortBy(newSortBy)
       setSortDirection('desc')
     }
+    
+    // Reset to first page when sort changes
+    setCurrentPage(1)
   }
 
   const handleTabChange = (tab: 'top' | 'followed') => {
     setActiveTab(tab)
+    // Reset to first page when tab changes
+    setCurrentPage(1)
+  }
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
+  const handleCreatorsPerPageChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const value = parseInt(e.target.value, 10)
+    setCreatorsPerPage(value)
+    setCurrentPage(1) // Reset to first page when changing items per page
   }
 
   // Get sort direction arrow
@@ -183,31 +312,123 @@ export function Dashboard() {
     )
   }
 
+  // Generate pagination controls
+  const renderPagination = () => {
+    if (totalPages <= 1) return null
+    
+    const pageNumbers: number[] = []
+    
+    // Always show first page
+    pageNumbers.push(1)
+    
+    // Show current page and pages around it
+    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+      if (!pageNumbers.includes(i)) {
+        pageNumbers.push(i)
+      }
+    }
+    
+    // Always show last page
+    if (totalPages > 1) {
+      pageNumbers.push(totalPages)
+    }
+    
+    // Sort page numbers
+    pageNumbers.sort((a, b) => a - b)
+    
+    return (
+      <div className="pagination-container">
+        <div className="pagination">
+          <button 
+            className="pagination-button prev" 
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            &laquo; Prev
+          </button>
+          
+          {pageNumbers.map((page, index) => {
+            // Add ellipsis if there's a gap
+            if (index > 0 && page > pageNumbers[index - 1] + 1) {
+              return (
+                <span key={`ellipsis-${index}`}>
+                  <span className="pagination-ellipsis">...</span>
+                  <button 
+                    key={page} 
+                    className={`pagination-button ${currentPage === page ? 'active' : ''}`}
+                    onClick={() => handlePageChange(page)}
+                  >
+                    {page}
+                  </button>
+                </span>
+              )
+            }
+            
+            return (
+              <button 
+                key={page} 
+                className={`pagination-button ${currentPage === page ? 'active' : ''}`}
+                onClick={() => handlePageChange(page)}
+              >
+                {page}
+              </button>
+            )
+          })}
+          
+          <button 
+            className="pagination-button next" 
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          >
+            Next &raquo;
+          </button>
+          
+          <span className="pagination-info">
+            Page {currentPage} of {totalPages}
+          </span>
+        </div>
+        
+        <div className="pagination-options">
+          <label htmlFor="creatorsPerPage">Creators per page:</label>
+          <select 
+            id="creatorsPerPage" 
+            value={creatorsPerPage} 
+            onChange={handleCreatorsPerPageChange}
+            className="creators-per-page-select"
+          >
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>Token Creators</h1>
+        <h1>Token Creators Leaderboard</h1>
         <p className="dashboard-description">
-          Track the most successful token creators on Odin.fun
+          Track the most successful and trustworthy token creators on Odin.fun, ranked by ForsetiScan
         </p>
       </div>
       
-      <div className="dashboard-tabs">
-        <button 
-          className={`dashboard-tab ${activeTab === 'top' ? 'active' : ''}`}
-          onClick={() => handleTabChange('top')}
-        >
-          Top Creators
-        </button>
-        <button 
-          className={`dashboard-tab ${activeTab === 'followed' ? 'active' : ''}`}
-          onClick={() => handleTabChange('followed')}
-        >
-          Followed Creators
-          {followedCreatorsCount > 0 && (
-            <span className="badge">{followedCreatorsCount}</span>
-          )}
-        </button>
+      <div className="dashboard-controls">
+        <div className="search-container">
+          <input
+            type="text"
+            placeholder="Search by dev or token..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="search-input"
+          />
+          <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
       </div>
       
       <div className="sort-options-container">
@@ -221,28 +442,16 @@ export function Dashboard() {
               Confidence {getSortArrow('confidence')}
             </button>
             <button 
-              className={`sort-button ${sortBy === 'success' ? 'active' : ''}`}
-              onClick={() => handleSortChange('success')}
-            >
-              Success Rate {getSortArrow('success')}
-            </button>
-            <button 
               className={`sort-button ${sortBy === 'volume' ? 'active' : ''}`}
               onClick={() => handleSortChange('volume')}
             >
               Volume {getSortArrow('volume')}
             </button>
             <button 
-              className={`sort-button ${sortBy === 'tokens' ? 'active' : ''}`}
-              onClick={() => handleSortChange('tokens')}
+              className={`sort-button ${sortBy === 'success' ? 'active' : ''}`}
+              onClick={() => handleSortChange('success')}
             >
-              Tokens Created {getSortArrow('tokens')}
-            </button>
-            <button 
-              className={`sort-button ${sortBy === 'holders' ? 'active' : ''}`}
-              onClick={() => handleSortChange('holders')}
-            >
-              Total Holders {getSortArrow('holders')}
+              Success Rate {getSortArrow('success')}
             </button>
             <button 
               className={`sort-button ${sortBy === 'active' ? 'active' : ''}`}
@@ -250,33 +459,58 @@ export function Dashboard() {
             >
               Active Tokens {getSortArrow('active')}
             </button>
+            <button 
+              className={`sort-button ${sortBy === 'holders' ? 'active' : ''}`}
+              onClick={() => handleSortChange('holders')}
+            >
+              Holders {getSortArrow('holders')}
+            </button>
           </div>
         </div>
       </div>
       
       <div className="dashboard-content">
-        {loading && creators.length === 0 ? (
-          <div className="loading">Loading top creators...</div>
+        {loading ? (
+          <div className="loading">
+            <div className="loading-spinner"></div>
+            <p>Loading developers data...</p>
+          </div>
         ) : error ? (
-          <div className="error">{error}</div>
-        ) : displayedCreators.length === 0 ? (
-          <div className="empty-state">
-            {activeTab === 'followed' ? (
-              <>
-                <p>You haven't followed any creators yet.</p>
-                <p>Star creators on the Top Creators tab to follow them.</p>
-              </>
-            ) : (
-              <p>No creators found. Please try refreshing the page.</p>
-            )}
+          <div className="error">
+            <p>Uh oh.. something went wrong</p>
+            <p>Maybe you are rate limited, wait a bit</p>
           </div>
         ) : (
-          <div className="creator-list">
-            {displayedCreators.map(creator => (
-              <CreatorCard key={creator.principal} creator={creator} />
-            ))}
-          </div>
+          <>
+            <div className="creator-list">
+              {paginatedCreators.map((creator) => (
+                <CreatorCard 
+                  key={creator.principal} 
+                  creator={creator} 
+                />
+              ))}
+            </div>
+            
+            {renderPagination()}
+          </>
         )}
+      </div>
+      
+      <div className="dashboard-actions">
+        <div className="dashboard-actions-left">
+          <span className="last-updated">
+            {lastUpdated ? `Last updated: ${formatLastUpdated(lastUpdated)}` : ''}
+          </span>
+        </div>
+        <div className="dashboard-actions-right">
+          <button 
+            className="refresh-button" 
+            onClick={() => loadCreators(true)} 
+            disabled={loading}
+          >
+            {loading ? 'Refreshing...' : 'Refresh Data'}
+          </button>
+        </div>
       </div>
     </div>
   )

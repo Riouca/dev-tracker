@@ -11,7 +11,10 @@ function Header({ currentPage, onPageChange }: HeaderProps) {
   return (
     <header className="app-header">
       <div className="header-content">
-        <Logo />
+        <div className="logo">
+          <Logo />
+          <span className="logo-text">ForsetiScan</span>
+        </div>
         <nav className="main-nav">
           <button 
             className={`nav-link ${currentPage === 'dashboard' ? 'active' : ''}`}
@@ -25,12 +28,14 @@ function Header({ currentPage, onPageChange }: HeaderProps) {
           >
             Recent Tokens
           </button>
-          <button 
-            className={`nav-link ${currentPage === 'search' ? 'active' : ''}`}
-            onClick={() => onPageChange('search')}
+          <a 
+            href="https://odin.fun" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="nav-link external"
           >
-            Search
-          </button>
+            Odin.fun
+          </a>
         </nav>
       </div>
     </header>

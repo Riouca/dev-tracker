@@ -5,8 +5,10 @@ import {
   getUserImageUrl, 
   getTokenImageUrl, 
   formatVolume, 
+  formatMarketcap,
   convertPriceToSats, 
   isTokenActive,
+  getBTCPrice,
   Token as ApiToken
 } from '../services/api'
 import { formatPrice, formatDate, formatNumber } from '../utils/formatters'
@@ -17,6 +19,8 @@ export function RecentTokens() {
   const [tokens, setTokens] = useState<ApiToken[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showUSD, setShowUSD] = useState(true) // Default to USD display
+  const [usdPrice, setUsdPrice] = useState<number | null>(null)
 
   const fetchRecentTokens = async () => {
     try {
@@ -47,8 +51,56 @@ export function RecentTokens() {
     }
   }
 
+  // Format token volume display
+  const formatTokenVolumeDisplay = (volume: number) => {
+    if (showUSD && usdPrice) {
+      const btcVolume = volume / 100000000 / 1000; // Convert to BTC and divide by 1000
+      const usdVolume = btcVolume * usdPrice;
+      
+      if (usdVolume >= 1000000) {
+        return `$${(usdVolume / 1000000).toFixed(1)}M`;
+      } else if (usdVolume >= 1000) {
+        return `$${(usdVolume / 1000).toFixed(1)}K`;
+      } else {
+        return `$${usdVolume.toFixed(0)}`;
+      }
+    } else {
+      return formatVolume(volume, false);
+    }
+  };
+
+  // Format token marketcap display
+  const formatTokenMarketcapDisplay = (marketcap: number) => {
+    if (showUSD && usdPrice) {
+      const btcMarketcap = marketcap / 100000000 / 1000; // Convert to BTC and divide by 1000
+      const usdMarketcap = btcMarketcap * usdPrice;
+      
+      if (usdMarketcap >= 1000000) {
+        return `$${(usdMarketcap / 1000000).toFixed(1)}M`;
+      } else if (usdMarketcap >= 1000) {
+        return `$${(usdMarketcap / 1000).toFixed(1)}K`;
+      } else {
+        return `$${usdMarketcap.toFixed(0)}`;
+      }
+    } else {
+      return formatMarketcap(marketcap, false);
+    }
+  };
+
   useEffect(() => {
     fetchRecentTokens()
+    
+    // Fetch BTC price in USD
+    const fetchBTCPrice = async () => {
+      try {
+        const price = await getBTCPrice();
+        setUsdPrice(price);
+      } catch (error) {
+        console.error('Error fetching BTC price:', error);
+      }
+    };
+
+    fetchBTCPrice();
   }, [])
 
   return (
@@ -65,6 +117,12 @@ export function RecentTokens() {
             disabled={loading}
           >
             {loading ? 'Refreshing...' : 'Refresh Tokens'}
+          </button>
+          <button 
+            className="currency-toggle-button"
+            onClick={() => setShowUSD(!showUSD)}
+          >
+            Show in {showUSD ? 'BTC' : 'USD'}
           </button>
         </div>
       </div>
@@ -107,7 +165,11 @@ export function RecentTokens() {
                 </div>
                 <div className="token-detail">
                   <span className="detail-label">Volume</span>
-                  <span className="detail-value">{formatVolume(token.volume)}</span>
+                  <span className="detail-value">{formatTokenVolumeDisplay(token.volume)}</span>
+                </div>
+                <div className="token-detail">
+                  <span className="detail-label">Marketcap</span>
+                  <span className="detail-value">{formatTokenMarketcapDisplay(token.marketcap)}</span>
                 </div>
                 <div className="token-detail">
                   <span className="detail-label">Holders</span>
