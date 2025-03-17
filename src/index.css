@@ -1435,25 +1435,7 @@ body {
   transition: all 0.2s ease;
 }
 
-.volume-value:hover {
-  text-decoration: underline;
-}
 
-.volume-value:hover::after {
-  content: 'Click to toggle USD/BTC';
-  position: absolute;
-  bottom: -20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: var(--color-background);
-  color: var(--color-text);
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--border-radius-sm);
-  font-size: 0.75rem;
-  white-space: nowrap;
-  z-index: 10;
-  opacity: 0.9;
-}
 
 .token-header-small {
   display: flex;
