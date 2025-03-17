@@ -1,5 +1,5 @@
 import { useState, useEffect, ChangeEvent } from 'react'
-import { findTopCreators, CreatorPerformance, CreatorSortOption, fetchBobData } from '../services/api'
+import { findTopCreators, CreatorPerformance, CreatorSortOption } from '../services/api'
 import CreatorCard from './CreatorCard'
 
 export function Dashboard() {
@@ -104,26 +104,6 @@ export function Dashboard() {
       // Check if component is still mounted before updating state
       if (!isMounted) return;
       
-      // Try to fetch Bob's data specifically
-      try {
-        const bobData = await fetchBobData()
-        if (bobData && isMounted) {
-          // Check if Bob is already in the list
-          const bobIndex = topCreators.findIndex(c => c.principal === bobData.principal)
-          
-          if (bobIndex === -1) {
-            // Bob not found, add him to the list
-            topCreators.push(bobData)
-            console.log('Added Bob to the creators list')
-          } else {
-            // Bob found, update his data
-            topCreators[bobIndex] = bobData
-            console.log('Updated Bob\'s data in the creators list')
-          }
-        }
-      } catch (bobError) {
-        console.error('Error fetching Bob data:', bobError)
-      }
       
       // Check if component is still mounted before updating state
       if (!isMounted) return;
@@ -248,14 +228,13 @@ export function Dashboard() {
         const query = searchQuery.toLowerCase().trim()
         filtered = sortedCreators.filter(creator => 
           // Search by developer name
-          creator.username.toLowerCase().includes(query) || 
-          // Search by token name
-          creator.tokens.some(token => token.name.toLowerCase().includes(query))
+          creator.username.toLowerCase().includes(query) ||
+          // Search by principal ID
+          creator.principal.toLowerCase().includes(query)
         )
-        console.log(`Filtered to ${filtered.length} creators matching search: ${query}`)
       }
       setDisplayedCreators(filtered)
-      console.log(`Displaying ${filtered.length} creators`)
+      console.log(`Filtered to ${filtered.length} top creators`)
     }
     
     // Reset to first page when filtering changes
@@ -287,8 +266,7 @@ export function Dashboard() {
 
   const handleTabChange = (tab: 'top' | 'followed') => {
     setActiveTab(tab)
-    // Reset to first page when tab changes
-    setCurrentPage(1)
+    setCurrentPage(1) // Reset to first page when changing tabs
   }
 
   const handlePageChange = (page: number) => {
@@ -409,25 +387,44 @@ export function Dashboard() {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>Token Creators Leaderboard</h1>
+        <h1>Developer Performance Tracker</h1>
         <p className="dashboard-description">
-          Track the most successful and trustworthy token creators on Odin.fun, ranked by ForsetiScan
+          Track the most successful token creators on Odin.fun with our confidence score system
         </p>
       </div>
       
-      <div className="dashboard-controls">
-        <div className="search-container">
-          <input
-            type="text"
-            placeholder="Search by dev or token..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="search-input"
-          />
-          <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
+      <div className="dashboard-tabs">
+        <button 
+          className={`dashboard-tab ${activeTab === 'top' ? 'active' : ''}`}
+          onClick={() => handleTabChange('top')}
+        >
+          Top Developers
+        </button>
+        <button 
+          className={`dashboard-tab ${activeTab === 'followed' ? 'active' : ''}`}
+          onClick={() => handleTabChange('followed')}
+        >
+          Followed
+          {followedCreatorsCount > 0 && (
+            <span className="badge">{followedCreatorsCount}</span>
+          )}
+        </button>
+      </div>
+      
+      <div className="dashboard-actions">
+        <div className="dashboard-actions-left">
+          <span className="last-updated">
+            {lastUpdated ? `Last updated: ${formatLastUpdated(lastUpdated)}` : ''}
+          </span>
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="Search by developper or token name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="search-input"
+            />
+          </div>
         </div>
       </div>
       
@@ -448,16 +445,22 @@ export function Dashboard() {
               Volume {getSortArrow('volume')}
             </button>
             <button 
+              className={`sort-button ${sortBy === 'active' ? 'active' : ''}`}
+              onClick={() => handleSortChange('active')}
+            >
+              Active Tokens {getSortArrow('active')}
+            </button>
+            <button 
               className={`sort-button ${sortBy === 'success' ? 'active' : ''}`}
               onClick={() => handleSortChange('success')}
             >
               Success Rate {getSortArrow('success')}
             </button>
             <button 
-              className={`sort-button ${sortBy === 'active' ? 'active' : ''}`}
-              onClick={() => handleSortChange('active')}
+              className={`sort-button ${sortBy === 'tokens' ? 'active' : ''}`}
+              onClick={() => handleSortChange('tokens')}
             >
-              Active Tokens {getSortArrow('active')}
+              Total Tokens {getSortArrow('tokens')}
             </button>
             <button 
               className={`sort-button ${sortBy === 'holders' ? 'active' : ''}`}
@@ -469,49 +472,55 @@ export function Dashboard() {
         </div>
       </div>
       
-      <div className="dashboard-content">
-        {loading ? (
-          <div className="loading">
-            <div className="loading-spinner"></div>
-            <p>Loading developers data...</p>
-          </div>
-        ) : error ? (
-          <div className="error">
-            <p>Uh oh.. something went wrong</p>
-            <p>Maybe you are rate limited, wait a bit</p>
-          </div>
-        ) : (
-          <>
-            <div className="creator-list">
-              {paginatedCreators.map((creator) => (
-                <CreatorCard 
-                  key={creator.principal} 
-                  creator={creator} 
-                />
-              ))}
-            </div>
-            
-            {renderPagination()}
-          </>
-        )}
-      </div>
-      
-      <div className="dashboard-actions">
-        <div className="dashboard-actions-left">
-          <span className="last-updated">
-            {lastUpdated ? `Last updated: ${formatLastUpdated(lastUpdated)}` : ''}
-          </span>
+      {loading && paginatedCreators.length === 0 ? (
+        <div className="loading">
+          <div className="loading-spinner"></div>
+          <p>Loading developers...</p>
         </div>
-        <div className="dashboard-actions-right">
-          <button 
-            className="refresh-button" 
-            onClick={() => loadCreators(true)} 
-            disabled={loading}
-          >
-            {loading ? 'Refreshing...' : 'Refresh Data'}
-          </button>
+      ) : error ? (
+        <div className="error">
+          <p>{error}</p>
+          <p>Maybe you are rate limited, wait a bit</p>
         </div>
-      </div>
+      ) : displayedCreators.length === 0 ? (
+        <div className="empty-state">
+          {activeTab === 'followed' ? (
+            <>
+              <p>You haven't followed any developers yet.</p>
+              <p>Browse the top developers and click "Follow" to add them here.</p>
+            </>
+          ) : (
+            <>
+              <p>No developers found matching your search criteria.</p>
+              <p>Try adjusting your search or refreshing the data.</p>
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="creator-list">
+            {paginatedCreators.map((creator) => (
+              <CreatorCard 
+                key={creator.principal} 
+                creator={creator} 
+                onUpdate={() => filterCreators()}
+              />
+            ))}
+          </div>
+          
+          {renderPagination()}
+          
+          <div className="refresh-container">
+            <button 
+              className="refresh-button"
+              onClick={handleRefresh}
+              disabled={loading}
+            >
+              {loading ? 'Refreshing...' : 'Refresh Data'}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 } 

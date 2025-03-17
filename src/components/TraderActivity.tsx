@@ -36,7 +36,7 @@ function TraderActivity({ followedTraders }: TraderActivityProps) {
             if (trades.length > 0) {
               // Add token names to trades
               const tradesWithTokenNames = await Promise.all(
-                trades.map(async (trade) => {
+                trades.map(async (trade: Trade) => {
                   try {
                     const tokenDetails = await getToken(trade.token);
                     return {
@@ -70,7 +70,7 @@ function TraderActivity({ followedTraders }: TraderActivityProps) {
         // Flatten the array of arrays and sort by time (most recent first)
         const allTrades = traderTradesArrays
           .flat()
-          .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+          .sort((a: TradeWithUser, b: TradeWithUser) => new Date(b.time).getTime() - new Date(a.time).getTime());
         
         setRecentTrades(allTrades);
         setError(null);

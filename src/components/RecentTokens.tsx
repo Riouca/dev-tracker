@@ -9,40 +9,69 @@ import {
   convertPriceToSats, 
   isTokenActive,
   getBTCPrice,
-  Token as ApiToken
+  Token as ApiToken,
+  getRarityLevel,
+  CreatorPerformance,
+  calculateCreatorPerformance
 } from '../services/api'
-import { formatPrice, formatDate, formatNumber } from '../utils/formatters'
+import { formatPrice, formatDate, formatNumber, getTimeSince } from '../utils/formatters'
 
 const API_BASE_URL = 'https://api.odin.fun/v1'
 
+interface TokenWithCreator {
+  token: ApiToken;
+  creator: CreatorPerformance | null;
+}
+
 export function RecentTokens() {
-  const [tokens, setTokens] = useState<ApiToken[]>([])
+  const [tokens, setTokens] = useState<TokenWithCreator[]>([])
+  const [filteredTokens, setFilteredTokens] = useState<TokenWithCreator[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showUSD, setShowUSD] = useState(true) // Default to USD display
   const [usdPrice, setUsdPrice] = useState<number | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [expandedCreator, setExpandedCreator] = useState<string | null>(null)
+  const [confidenceFilter, setConfidenceFilter] = useState<string>('all')
 
-  const fetchRecentTokens = async () => {
+  const fetchRecentTokens = async (forceRefresh = false) => {
     try {
       setLoading(true)
       setError(null)
       
-      // Use the direct API endpoint for recent tokens
+      // Use the direct API endpoint for recent tokens - limit to 15
       const response = await axios.get(
-        `${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=30`
+        `${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=15`
       )
       
       const recentTokens = response.data.data || []
       
-      // Process tokens
-      const processedTokens = recentTokens.map((token: ApiToken) => {
+      // Process tokens and fetch creator data
+      const tokensWithCreators: TokenWithCreator[] = []
+      
+      for (const token of recentTokens) {
         // Check if token is active
         token.price_in_sats = convertPriceToSats(token.price)
         isTokenActive(token)
-        return token
-      })
+        
+        try {
+          // Fetch creator performance data
+          const creatorPerformance = await calculateCreatorPerformance(token.creator)
+          tokensWithCreators.push({
+            token,
+            creator: creatorPerformance
+          })
+        } catch (err) {
+          console.error(`Error fetching creator for token ${token.id}:`, err)
+          tokensWithCreators.push({
+            token,
+            creator: null
+          })
+        }
+      }
       
-      setTokens(processedTokens)
+      setTokens(tokensWithCreators)
+      setLastUpdated(new Date())
     } catch (error) {
       console.error('Failed to fetch recent tokens:', error)
       setError('Failed to load recent tokens')
@@ -50,6 +79,36 @@ export function RecentTokens() {
       setLoading(false)
     }
   }
+
+  // Apply confidence filter
+  useEffect(() => {
+    if (tokens.length === 0) return
+    
+    if (confidenceFilter === 'all') {
+      setFilteredTokens(tokens)
+      return
+    }
+    
+    // Filter tokens based on confidence score
+    const filtered = tokens.filter(({ creator }) => {
+      if (!creator) return false
+      
+      switch (confidenceFilter) {
+        case 'legendary':
+          return creator.confidenceScore >= 90
+        case 'high':
+          return creator.confidenceScore >= 70 && creator.confidenceScore < 90
+        case 'medium':
+          return creator.confidenceScore >= 50 && creator.confidenceScore < 70
+        case 'low':
+          return creator.confidenceScore < 50
+        default:
+          return true
+      }
+    })
+    
+    setFilteredTokens(filtered)
+  }, [tokens, confidenceFilter])
 
   // Format token volume display
   const formatTokenVolumeDisplay = (volume: number) => {
@@ -87,6 +146,49 @@ export function RecentTokens() {
     }
   };
 
+  // Format the last updated time
+  const formatLastUpdated = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins === 1) return '1 minute ago';
+    if (diffMins < 60) return `${diffMins} minutes ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours === 1) return '1 hour ago';
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    return `${diffDays} days ago`;
+  };
+
+  // Get rarity color for confidence score
+  const getRarityColor = (score: number): string => {
+    const level = getRarityLevel(score);
+    switch (level) {
+      case 'legendary': return 'text-yellow-400'; // Gold
+      case 'epic': return 'text-purple-400';      // Purple
+      case 'great': return 'text-blue-400';       // Blue
+      case 'okay': return 'text-green-400';       // Green
+      case 'neutral': return 'text-gray-100';     // White
+      case 'meh': return 'text-gray-400';         // Gray
+      case 'scam': return 'text-red-500';         // Red
+      default: return 'text-red-500';             // Red
+    }
+  };
+
+  // Toggle expanded creator
+  const toggleExpandCreator = (principal: string) => {
+    if (expandedCreator === principal) {
+      setExpandedCreator(null);
+    } else {
+      setExpandedCreator(principal);
+    }
+  };
+
   useEffect(() => {
     fetchRecentTokens()
     
@@ -104,94 +206,247 @@ export function RecentTokens() {
   }, [])
 
   return (
-    <div className="recent-tokens">
-      <div className="dashboard-header">
-        <h1>Recently Launched Tokens</h1>
-        <p className="dashboard-description">
-          Discover the newest tokens launched on Odin.fun
-        </p>
+    <div className="recent-tokens-container">
+      <div className="recent-tokens">
+        <div className="dashboard-header">
+          <h1>Recently Launched Tokens</h1>
+          <p className="dashboard-description">
+            Discover the newest tokens launched on Odin.fun with developer confidence scores
+          </p>
+        </div>
+        
         <div className="dashboard-actions">
-          <button 
-            className="refresh-button"
-            onClick={fetchRecentTokens}
-            disabled={loading}
-          >
-            {loading ? 'Refreshing...' : 'Refresh Tokens'}
-          </button>
-          <button 
-            className="currency-toggle-button"
-            onClick={() => setShowUSD(!showUSD)}
-          >
-            Show in {showUSD ? 'BTC' : 'USD'}
-          </button>
-        </div>
-      </div>
-      
-      {loading && tokens.length === 0 ? (
-        <div className="loading">Loading recent tokens...</div>
-      ) : error ? (
-        <div className="error">{error}</div>
-      ) : (
-        <div className="tokens-grid recent-tokens-grid">
-          {tokens.map(token => (
-            <div 
-              key={token.id} 
-              className={`token-card ${token.is_active ? 'active-token' : 'inactive-token'}`}
-              onClick={() => window.open(`https://odin.fun/token/${token.id}`, '_blank')}
-            >
-              <div className="token-header">
-                <div className="token-image-wrapper">
-                  <img 
-                    src={getTokenImageUrl(token.id)} 
-                    alt={token.name} 
-                    className="token-image" 
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.onerror = null;
-                      target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>';
-                    }}
-                  />
-                </div>
-                <div className="token-title">
-                  <h3>{token.name}</h3>
-                  <span className="token-ticker">${token.ticker || token.name.substring(0, 4).toUpperCase()}</span>
-                </div>
-              </div>
-              
-              <div className="token-details">
-                <div className="token-detail">
-                  <span className="detail-label">Price</span>
-                  <span className="detail-value">{formatPrice(token.price)}</span>
-                </div>
-                <div className="token-detail">
-                  <span className="detail-label">Volume</span>
-                  <span className="detail-value">{formatTokenVolumeDisplay(token.volume)}</span>
-                </div>
-                <div className="token-detail">
-                  <span className="detail-label">Marketcap</span>
-                  <span className="detail-value">{formatTokenMarketcapDisplay(token.marketcap)}</span>
-                </div>
-                <div className="token-detail">
-                  <span className="detail-label">Holders</span>
-                  <span className="detail-value">{formatNumber(token.holder_count)}</span>
-                </div>
-                <div className="token-detail">
-                  <span className="detail-label">Trades</span>
-                  <span className="detail-value">{formatNumber(token.buy_count + token.sell_count)}</span>
-                </div>
-                <div className="token-detail">
-                  <span className="detail-label">Created</span>
-                  <span className="detail-value">{formatDate(token.created_time)}</span>
-                </div>
-              </div>
-              
-              {!token.is_active && (
-                <div className="token-inactive-badge">Inactive</div>
-              )}
+          <div className="dashboard-actions-left">
+            <span className="last-updated">
+              {lastUpdated ? `Last updated: ${formatLastUpdated(lastUpdated)}` : ''}
+            </span>
+            <div className="confidence-filter">
+              <label htmlFor="confidence-filter">Filter by confidence:</label>
+              <select 
+                id="confidence-filter" 
+                value={confidenceFilter}
+                onChange={(e) => setConfidenceFilter(e.target.value)}
+                className="confidence-select"
+              >
+                <option value="all">All Developers</option>
+                <option value="legendary">Legendary (90%+)</option>
+                <option value="high">High (70-89%)</option>
+                <option value="medium">Medium (50-69%)</option>
+                <option value="low">Low (Below 50%)</option>
+              </select>
             </div>
-          ))}
+          </div>
+          <div className="dashboard-actions-right">
+            <button 
+              className="refresh-button"
+              onClick={() => fetchRecentTokens(true)}
+              disabled={loading}
+            >
+              {loading ? 'Refreshing...' : 'Refresh Tokens'}
+            </button>
+            <button 
+              className="currency-toggle-button"
+              onClick={() => setShowUSD(!showUSD)}
+            >
+              Show in {showUSD ? 'BTC' : 'USD'}
+            </button>
+          </div>
         </div>
-      )}
+        
+        {loading && tokens.length === 0 ? (
+          <div className="loading">
+            <div className="loading-spinner"></div>
+            <p>Loading recent tokens...</p>
+          </div>
+        ) : error ? (
+          <div className="error">
+            <p>Uh oh.. something went wrong</p>
+            <p>Maybe you are rate limited, wait a bit</p>
+          </div>
+        ) : filteredTokens.length === 0 ? (
+          <div className="empty-state">
+            <p>No tokens match the selected confidence filter.</p>
+            <p>Try selecting a different filter or refreshing the data.</p>
+          </div>
+        ) : (
+          <div className="creator-list">
+            {filteredTokens.map(({ token, creator }) => (
+              <div 
+                key={token.id} 
+                className="creator-card"
+              >
+                <div className="creator-header compact" onClick={() => window.open(`https://odin.fun/token/${token.id}`, '_blank')}>
+                  <div className="token-info">
+                    <div className="token-image-wrapper large">
+                      <img 
+                        src={getTokenImageUrl(token.id)} 
+                        alt={token.name} 
+                        className="token-image" 
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.onerror = null;
+                          target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>';
+                        }}
+                      />
+                    </div>
+                    <div className="token-details">
+                      <div className="token-title">
+                        <h3 className="token-name large">{token.name}</h3>
+                        <span className="token-ticker large">${token.ticker || token.name.substring(0, 4).toUpperCase()}</span>
+                      </div>
+                      <div className="token-metrics compact">
+                        <div className="token-price large">
+                          <span className="metric-label">Price:</span> 
+                          <span>{formatPrice(token.price)}</span>
+                        </div>
+                        <div className="token-created large">
+                          <span className="metric-label">Created:</span> 
+                          <span>{getTimeSince(token.created_time)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="token-stats">
+                  <div className="token-stat">
+                    <div className="stat-value">{formatNumber(token.holder_count)}</div>
+                    <div className="stat-label">Holders</div>
+                  </div>
+                  <div className="token-stat">
+                    <div className="stat-value">{formatTokenVolumeDisplay(token.volume)}</div>
+                    <div className="stat-label">Volume</div>
+                  </div>
+                  <div className="token-stat">
+                    <div className="stat-value">{formatTokenMarketcapDisplay(token.marketcap)}</div>
+                    <div className="stat-label">Marketcap</div>
+                  </div>
+                  <div className="token-stat">
+                    <div className="stat-value">{formatNumber(token.buy_count + token.sell_count)}</div>
+                    <div className="stat-label">Trades</div>
+                  </div>
+                </div>
+                
+                {creator ? (
+                  <div 
+                    className={`token-creator-info ${expandedCreator === creator.principal ? 'expanded' : ''}`}
+                    onClick={() => creator && toggleExpandCreator(creator.principal)}
+                  >
+                    <div className="creator-summary">
+                      <div className="creator-avatar">
+                        {creator.image ? (
+                          <img 
+                            src={getUserImageUrl(creator.principal)} 
+                            alt={creator.username} 
+                          />
+                        ) : (
+                          <div className="creator-avatar-placeholder">
+                            {creator.username[0].toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="creator-info">
+                        <div className="creator-name-wrapper">
+                          <h3 className={`creator-name ${getRarityColor(creator.confidenceScore)}`}>
+                            {creator.username}
+                          </h3>
+                          <span className={`rarity-badge ${getRarityColor(creator.confidenceScore)}`}>
+                            {getRarityLevel(creator.confidenceScore).charAt(0).toUpperCase() + getRarityLevel(creator.confidenceScore).slice(1)}
+                          </span>
+                        </div>
+                        <div className="creator-metrics">
+                          <div className="confidence-score">
+                            <span className="metric-label">Confidence:</span> 
+                            <span className={getRarityColor(creator.confidenceScore)}>{creator.confidenceScore.toFixed(1)}%</span>
+                          </div>
+                          <div className="creator-tokens">
+                            <span className="metric-label">Tokens:</span> 
+                            <span>{creator.activeTokens}/{creator.totalTokens}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {expandedCreator === creator.principal && (
+                      <div className="creator-tokens">
+                        <div className="token-list-header">
+                          <h4>All Tokens ({creator.tokens.length})</h4>
+                        </div>
+                        <div className="token-list">
+                          {creator.tokens.map(token => (
+                            <div 
+                              key={token.id} 
+                              className={`token-item ${token.is_active ? 'active' : 'inactive'}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`https://odin.fun/token/${token.id}`, '_blank');
+                              }}
+                            >
+                              <div className="token-header-small">
+                                <div className="token-info">
+                                  <div className="token-image-small">
+                                    <img 
+                                      src={getTokenImageUrl(token.id)} 
+                                      alt={token.name} 
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.onerror = null;
+                                        target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>';
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="token-name">{token.name}</div>
+                                </div>
+                                <div className="token-price-container">
+                                  <div className="token-price-large">{formatPrice(token.price)}</div>
+                                </div>
+                              </div>
+                              
+                              <div className="token-stats">
+                                <div className="token-stat">
+                                  <div className="stat-label">Volume</div>
+                                  <div className="stat-value">{formatTokenVolumeDisplay(token.volume)}</div>
+                                </div>
+                                <div className="token-stat">
+                                  <div className="stat-label">Holders</div>
+                                  <div className="stat-value">{formatNumber(token.holder_count)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="token-creator-info">
+                    <div className="no-creator-data">
+                      <p>No developer data available</p>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="token-actions">
+                  <button 
+                    className="view-token-button"
+                    onClick={() => window.open(`https://odin.fun/token/${token.id}`, '_blank')}
+                  >
+                    View Token
+                  </button>
+                  {creator && (
+                    <button 
+                      className="view-creator-button"
+                      onClick={() => window.open(`https://odin.fun/user/${creator.principal}`, '_blank')}
+                    >
+                      View Developer
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 } 

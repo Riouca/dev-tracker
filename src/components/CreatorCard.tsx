@@ -4,6 +4,7 @@ import { formatNumber, formatPrice, getTimeSince } from '../utils/formatters';
 
 interface CreatorCardProps {
   creator: CreatorPerformance;
+  onUpdate?: () => void;
 }
 
 function getRarityColor(score: number): string {
@@ -28,7 +29,7 @@ function getRankMedal(rank: number | undefined): string {
   return '';
 }
 
-function CreatorCard({ creator }: CreatorCardProps) {
+function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFollowed, setIsFollowed] = useState(false);
   const [showUSD, setShowUSD] = useState(true); // Default to USD display
@@ -48,6 +49,12 @@ function CreatorCard({ creator }: CreatorCardProps) {
     fetchBTCPrice();
   }, []);
 
+  // Check if creator is followed on component mount
+  useEffect(() => {
+    const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]');
+    setIsFollowed(followedCreators.includes(creator.principal));
+  }, [creator.principal]);
+
   const toggleFollow = (e: React.MouseEvent) => {
     e.stopPropagation();
     const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]');
@@ -65,13 +72,12 @@ function CreatorCard({ creator }: CreatorCardProps) {
     setIsFollowed(!isFollowed);
     // Trigger storage event for other components to update
     window.dispatchEvent(new Event('storage'));
+    
+    // Call onUpdate if provided
+    if (onUpdate) {
+      onUpdate();
+    }
   };
-
-  // Check if creator is followed on component mount
-  useState(() => {
-    const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]');
-    setIsFollowed(followedCreators.includes(creator.principal));
-  });
 
   const toggleExpand = () => {
     setIsExpanded(!isExpanded);
@@ -219,16 +225,17 @@ function CreatorCard({ creator }: CreatorCardProps) {
               </div>
             </div>
           </div>
-          <button 
-            className={`star-button ${isFollowed ? 'following' : ''}`}
-            onClick={toggleFollow}
-            aria-label={isFollowed ? 'Unfollow creator' : 'Follow creator'}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-            </svg>
-          </button>
+          <div className="creator-actions">
+            <button 
+              className={`follow-button ${isFollowed ? 'following' : ''}`}
+              onClick={toggleFollow}
+              aria-label={isFollowed ? 'Unfollow creator' : 'Follow creator'}
+            >
+              {isFollowed ? 'Following' : 'Follow'}
+            </button>
+          </div>
         </div>
+        
         <div className="creator-stats">
           <div className="creator-stat">
             <div className="stat-value">{creator.activeTokens}/{creator.totalTokens}</div>
@@ -254,7 +261,7 @@ function CreatorCard({ creator }: CreatorCardProps) {
       {isExpanded && (
         <div className="creator-tokens">
           <div className="token-list-header">
-            <h4>Top Tokens</h4>
+            <h4>All Tokens ({creator.tokens.length})</h4>
             <button 
               className="currency-toggle-button"
               onClick={(e) => {

@@ -113,6 +113,20 @@ export interface CreatorPerformance {
   lastTokenCreated?: string;
 }
 
+// Define TraderPerformance interface
+export interface TraderPerformance {
+  principal: string;
+  username: string;
+  image?: string | null;
+  totalTokens: number;
+  activeTokens: number;
+  successRate: number;
+  totalVolume: number;
+  confidenceScore: number;
+  recentTokens: string[];
+  lastActive?: Date;
+}
+
 // Get token image URL
 export const getTokenImageUrl = (tokenId: string): string => {
   return `https://images.odin.fun/token/${tokenId}`;
@@ -472,7 +486,7 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
         const priceA = a.price_in_sats || a.price / 1000;
         const priceB = b.price_in_sats || b.price / 1000;
         return priceB - priceA;
-      }).slice(0, 5)
+      }).slice(0, 25)
     };
   } catch (error) {
     console.error('Error calculating creator performance:', error);
@@ -497,8 +511,6 @@ export const getUserBalances = async (principal: string): Promise<any> => {
 // Sort options for creators
 export type CreatorSortOption = 'volume' | 'active' | 'weighted' | 'confidence' | 'success' | 'tokens' | 'holders';
 
-// Bob's principal ID
-const BOB_PRINCIPAL = 'bob-principal';
 
 // Session storage key for creators cache
 const CREATORS_CACHE_KEY = 'forseti_creators_cache';
@@ -575,10 +587,6 @@ export const findTopCreators = async (
       }
     });
     
-    // Add Bob's principal if needed
-    if (!creatorSet.has('bob-principal') && BOB_PRINCIPAL) {
-      creatorSet.add(BOB_PRINCIPAL);
-    }
     
     const creatorPrincipals = Array.from(creatorSet);
     console.log(`Found ${creatorPrincipals.length} unique creators from top tokens`);
@@ -658,21 +666,6 @@ const sortCreatorsData = (
   }));
 };
 
-// Fetch Bob's data specifically
-export const fetchBobData = async (): Promise<CreatorPerformance | null> => {
-  try {
-    // Bob's principal ID - replace with actual ID when known
-    const bobPrincipal = 'bob-principal';
-    
-    // Try to get Bob's performance data
-    const bobPerformance = await calculateCreatorPerformance(bobPrincipal);
-    
-    return bobPerformance;
-  } catch (error) {
-    console.error('Error fetching Bob data:', error);
-    return null;
-  }
-};
 
 // Get recent tokens with creator info
 export const getRecentTokensWithCreators = async (limit = 10): Promise<{token: Token, creator: User | null}[]> => {
@@ -1084,4 +1077,41 @@ export const getRarityLevel = (score: number): string => {
   if (score >= 45) return 'meh';          // Gray
   if (score >= 30) return 'scam';         // Brown
   return 'scam';                          // Red
+};
+
+// Get trades for a specific user
+export const getUserTrades = async (principal: string, limit = 10): Promise<Trade[]> => {
+  try {
+    const response = await retryApiCall(() => 
+      axios.get(`${API_BASE_URL}/trades?user=${principal}&limit=${limit}`)
+    );
+    return response.data.data || [];
+  } catch (error) {
+    console.error(`Error fetching trades for user ${principal}:`, error);
+    return [];
+  }
+};
+
+// Find top traders based on performance metrics
+export const findTopTraders = async (limit = 10): Promise<TraderPerformance[]> => {
+  try {
+    // For now, we'll use the top creators as traders
+    const topCreators = await findTopCreators(limit);
+    
+    // Convert creators to traders format
+    return topCreators.map(creator => ({
+      principal: creator.principal,
+      username: creator.username,
+      image: creator.image,
+      totalTokens: creator.totalTokens,
+      activeTokens: creator.activeTokens,
+      successRate: creator.successRate,
+      totalVolume: creator.totalVolume,
+      confidenceScore: creator.confidenceScore,
+      recentTokens: creator.tokens.slice(0, 3).map(token => token.id)
+    }));
+  } catch (error) {
+    console.error('Error finding top traders:', error);
+    return [];
+  }
 }; 
