@@ -1,6 +1,5 @@
 import { useState, useEffect, ChangeEvent } from 'react'
 import { findTopCreators, CreatorPerformance, CreatorSortOption } from '../services/api'
-import { fetchCreatorsWithTokens } from '../services/dbApi'
 import CreatorCard from './CreatorCard'
 
 export function Dashboard() {
@@ -51,7 +50,7 @@ export function Dashboard() {
   // Sort creators when sortBy, sortDirection, or creators change
   useEffect(() => {
     if (creators.length > 0) {
-      sortCreators(sortBy, sortDirection, creators)
+      sortCreators(sortBy, sortDirection)
     }
   }, [sortBy, sortDirection, creators])
 
@@ -69,7 +68,7 @@ export function Dashboard() {
 
   // Check for cached timestamp
   useEffect(() => {
-    const cachedTimestamp = sessionStorage.getItem('db_cache_timestamp')
+    const cachedTimestamp = sessionStorage.getItem('forseti_creators_cache_timestamp')
     if (cachedTimestamp) {
       setLastUpdated(new Date(parseInt(cachedTimestamp, 10)))
     }
@@ -82,50 +81,52 @@ export function Dashboard() {
     }
   }, [searchQuery, creators])
 
-  // Load creators from database API
   const loadCreators = async (forceRefresh = false) => {
-    // Track if component is mounted to prevent state updates after unmount
-    let isMounted = true
+    // Create a flag to track if the component is still mounted
+    let isMounted = true;
     
     try {
       setLoading(true)
       setError(null)
       
-      console.log('Loading creators from database...')
+      console.log('Loading creators...')
       
       // If forceRefresh is true, clear the cache
       if (forceRefresh) {
-        sessionStorage.removeItem('db_creators_with_tokens_data')
-        sessionStorage.removeItem('db_cache_timestamp')
+        sessionStorage.removeItem('forseti_creators_cache')
+        sessionStorage.removeItem('forseti_creators_cache_timestamp')
       }
       
-      // Load creators with tokens from database API
-      const creatorsWithTokens = await fetchCreatorsWithTokens()
-      console.log(`Loaded ${creatorsWithTokens.length} creators from database`)
+      // Load creators with a higher limit to show more developers
+      const topCreators = await findTopCreators(200, 'confidence')
+      console.log(`Loaded ${topCreators.length} creators`)
       
       // Check if component is still mounted before updating state
       if (!isMounted) return;
       
-      if (creatorsWithTokens.length === 0) {
-        setError('No creators found in database. Please try again later.')
+      
+      // Check if component is still mounted before updating state
+      if (!isMounted) return;
+      
+      if (topCreators.length === 0) {
+        setError('No creators found. Please try again later.')
       } else {
-        setCreators(creatorsWithTokens)
-        console.log(`Set ${creatorsWithTokens.length} creators in state`)
+        setCreators(topCreators)
+        console.log(`Set ${topCreators.length} creators in state`)
         
         // Update last updated timestamp
         const now = new Date()
         setLastUpdated(now)
         
-        // Apply initial sorting
-        sortCreators(sortBy, sortDirection, creatorsWithTokens)
+        // Store timestamp in session storage
+        sessionStorage.setItem('forseti_creators_cache_timestamp', now.getTime().toString())
       }
-    } catch (error) {
-      console.error('Error loading creators:', error)
-      
+    } catch (err) {
+      console.error('Error loading creators:', err)
       // Check if component is still mounted before updating state
-      if (!isMounted) return;
-      
-      setError('Failed to load creators. Please try again later.')
+      if (isMounted) {
+        setError('Failed to load creators')
+      }
     } finally {
       // Check if component is still mounted before updating state
       if (isMounted) {
@@ -133,10 +134,10 @@ export function Dashboard() {
       }
     }
     
-    // Cleanup function to set isMounted to false when component unmounts
+    // Return a cleanup function that sets isMounted to false
     return () => {
-      isMounted = false
-    }
+      isMounted = false;
+    };
   }
 
   // Format the last updated time
@@ -162,8 +163,8 @@ export function Dashboard() {
     loadCreators(true) // Always force refresh
   }
 
-  const sortCreators = (sortOption: CreatorSortOption, direction: 'asc' | 'desc' = 'desc', creatorsToSort: CreatorPerformance[] = creators) => {
-    let sortedCreators = [...creatorsToSort]
+  const sortCreators = (sortOption: CreatorSortOption, direction: 'asc' | 'desc' = 'desc') => {
+    let sortedCreators = [...creators]
     
     const sortFn = (a: CreatorPerformance, b: CreatorPerformance): number => {
       let result = 0;
@@ -208,8 +209,7 @@ export function Dashboard() {
       rank: index + 1
     }))
     
-    // Update displayed creators
-    setDisplayedCreators(sortedCreators)
+    console.log(`Sorted ${sortedCreators.length} creators by ${sortOption} in ${direction} order`)
     
     // Filter based on active tab
     filterCreators(sortedCreators)
@@ -382,15 +382,6 @@ export function Dashboard() {
         </div>
       </div>
     )
-  }
-
-  const updatePagination = (filteredCreators: CreatorPerformance[]) => {
-    const indexOfLastCreator = currentPage * creatorsPerPage
-    const indexOfFirstCreator = indexOfLastCreator - creatorsPerPage
-    const currentCreators = filteredCreators.slice(indexOfFirstCreator, indexOfLastCreator)
-    
-    setPaginatedCreators(currentCreators)
-    setTotalPages(Math.ceil(filteredCreators.length / creatorsPerPage))
   }
 
   return (
