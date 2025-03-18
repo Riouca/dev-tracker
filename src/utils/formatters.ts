@@ -33,8 +33,8 @@ export function formatNumber(num: number): string {
 /**
  * Get time elapsed since a date
  */
-export function getTimeSince(dateString: string): string {
-  const date = new Date(dateString)
+export function getTimeSince(dateInput: string | Date): string {
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffSec = Math.floor(diffMs / 1000)
@@ -49,6 +49,6 @@ export function getTimeSince(dateString: string): string {
   } else if (diffMin > 0) {
     return `${diffMin} minute${diffMin > 1 ? 's' : ''} ago`
   } else {
-    return 'Just now'
+    return 'just now'
   }
 } 

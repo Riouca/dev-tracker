@@ -1,5 +1,5 @@
 import { useState, useEffect, ChangeEvent } from 'react'
-import { findTopCreators, CreatorPerformance, CreatorSortOption } from '../services/api'
+import { findTopCreators, CreatorPerformance, CreatorSortOption, getBTCPrice } from '../services/api'
 import CreatorCard from './CreatorCard'
 
 export function Dashboard() {
@@ -13,6 +13,7 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState<'top' | 'followed'>('top')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [usdPrice, setUsdPrice] = useState<number | null>(null)
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -37,14 +38,19 @@ export function Dashboard() {
     }
   }, [])
 
-  // Load creators on initial render
+  // Load creators on initial render and auto-refresh every 20 minutes
   useEffect(() => {
-    // Use a small timeout to ensure the component is fully mounted
-    const timer = setTimeout(() => {
-      loadCreators(false)
-    }, 100)
+    // Initial load
+    loadCreators()
     
-    return () => clearTimeout(timer)
+    // Set up polling every 20 minutes (1200000 ms)
+    const intervalId = setInterval(() => {
+      console.log('Auto-refreshing dashboard data...')
+      loadCreators()
+    }, 1200000) // 20 minutes
+    
+    // Clean up interval on unmount
+    return () => clearInterval(intervalId)
   }, [])
 
   // Sort creators when sortBy, sortDirection, or creators change
@@ -81,63 +87,37 @@ export function Dashboard() {
     }
   }, [searchQuery, creators])
 
-  const loadCreators = async (forceRefresh = false) => {
-    // Create a flag to track if the component is still mounted
-    let isMounted = true;
-    
+  const loadCreators = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      console.log('Loading creators...')
+      // Use the findTopCreators API function
+      let tempCreators = await findTopCreators(200)
       
-      // If forceRefresh is true, clear the cache
-      if (forceRefresh) {
-        sessionStorage.removeItem('forseti_creators_cache')
-        sessionStorage.removeItem('forseti_creators_cache_timestamp')
+      // Filter out creators with no username
+      tempCreators = tempCreators.filter(creator => creator.username)
+      
+      // Get BTC price for USD conversion
+      try {
+        const btcPrice = await getBTCPrice()
+        setUsdPrice(btcPrice)
+      } catch (priceError) {
+        console.error('Error fetching BTC price:', priceError)
       }
       
-      // Load creators with a higher limit to show more developers
-      const topCreators = await findTopCreators(200, 'confidence')
-      console.log(`Loaded ${topCreators.length} creators`)
+      setCreators(tempCreators)
+      setLastUpdated(new Date())
+      setLoading(false)
       
-      // Check if component is still mounted before updating state
-      if (!isMounted) return;
-      
-      
-      // Check if component is still mounted before updating state
-      if (!isMounted) return;
-      
-      if (topCreators.length === 0) {
-        setError('No creators found. Please try again later.')
-      } else {
-        setCreators(topCreators)
-        console.log(`Set ${topCreators.length} creators in state`)
-        
-        // Update last updated timestamp
-        const now = new Date()
-        setLastUpdated(now)
-        
-        // Store timestamp in session storage
-        sessionStorage.setItem('forseti_creators_cache_timestamp', now.getTime().toString())
-      }
-    } catch (err) {
-      console.error('Error loading creators:', err)
-      // Check if component is still mounted before updating state
-      if (isMounted) {
-        setError('Failed to load creators')
-      }
-    } finally {
-      // Check if component is still mounted before updating state
-      if (isMounted) {
-        setLoading(false)
-      }
+      // Initial filter and pagination
+      filterCreators(tempCreators)
+      updatePaginatedCreators()
+    } catch (error) {
+      console.error('Failed to load creators:', error)
+      setError('Failed to load data. Please try again later.')
+      setLoading(false)
     }
-    
-    // Return a cleanup function that sets isMounted to false
-    return () => {
-      isMounted = false;
-    };
   }
 
   // Format the last updated time
@@ -157,10 +137,6 @@ export function Dashboard() {
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays === 1) return 'Yesterday';
     return `${diffDays} days ago`;
-  }
-
-  const handleRefresh = () => {
-    loadCreators(true) // Always force refresh
   }
 
   const sortCreators = (sortOption: CreatorSortOption, direction: 'asc' | 'desc' = 'desc') => {
@@ -509,16 +485,6 @@ export function Dashboard() {
           </div>
           
           {renderPagination()}
-          
-          <div className="refresh-container">
-            <button 
-              className="refresh-button"
-              onClick={handleRefresh}
-              disabled={loading}
-            >
-              {loading ? 'Refreshing...' : 'Refresh Data'}
-            </button>
-          </div>
         </>
       )}
     </div>

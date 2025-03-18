@@ -795,4 +795,74 @@ export const getRecentlyLaunchedTokens = async (limit = 20): Promise<Token[]> =>
       return [];
     }
   }
+};
+
+// Fetch the 4 newest tokens with a short cache time (20 seconds)
+export const getNewestTokens = async (): Promise<Token[]> => {
+  try {
+    // Use dedicated endpoint with very short cache time
+    const response = await axios.get(`${PROXY_BASE_URL}/newest-tokens`);
+    
+    const tokens = response.data.data || [];
+    
+    // Add price_in_sats and check activity status for each token
+    return tokens.map((token: Token) => {
+      token.price_in_sats = convertPriceToSats(token.price);
+      isTokenActive(token);
+      return token;
+    });
+  } catch (error) {
+    console.error('Error fetching newest tokens:', error);
+    
+    // Fallback to direct API call if proxy fails
+    try {
+      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=4`);
+      const tokens = response.data.data || [];
+      
+      return tokens.map((token: Token) => {
+        token.price_in_sats = convertPriceToSats(token.price);
+        isTokenActive(token);
+        return token;
+      });
+    } catch (directError) {
+      console.error('Direct API fallback failed:', directError);
+      return [];
+    }
+  }
+};
+
+// Fetch older recent tokens (5-30) with a longer cache time (5 minutes)
+export const getOlderRecentTokens = async (limit = 26): Promise<Token[]> => {
+  try {
+    // Use dedicated endpoint with longer cache time
+    const response = await axios.get(`${PROXY_BASE_URL}/older-recent-tokens`, {
+      params: { limit }
+    });
+    
+    const tokens = response.data.data || [];
+    
+    // Add price_in_sats and check activity status for each token
+    return tokens.map((token: Token) => {
+      token.price_in_sats = convertPriceToSats(token.price);
+      isTokenActive(token);
+      return token;
+    });
+  } catch (error) {
+    console.error('Error fetching older recent tokens:', error);
+    
+    // Fallback to direct API call if proxy fails
+    try {
+      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=2&limit=${limit}`);
+      const tokens = response.data.data || [];
+      
+      return tokens.map((token: Token) => {
+        token.price_in_sats = convertPriceToSats(token.price);
+        isTokenActive(token);
+        return token;
+      });
+    } catch (directError) {
+      console.error('Direct API fallback failed:', directError);
+      return [];
+    }
+  }
 }; 

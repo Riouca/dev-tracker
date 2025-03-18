@@ -9,8 +9,10 @@ const API_BASE_URL = 'https://api.odin.fun/v1';
 
 // Cache expiry times in seconds
 const CACHE_EXPIRY = {
-  DEFAULT: 20 * 60, // 20 minutes for most endpoints
-  RECENT_TOKENS: 30  // 30 seconds for recently launched tokens
+  DEFAULT: 20 * 60,           // 20 minutes for most endpoints
+  RECENT_TOKENS: 30,          // 30 seconds for recently launched tokens
+  NEWEST_TOKENS: 20,          // 20 seconds for the 4 newest tokens
+  OLDER_RECENT_TOKENS: 5 * 60 // 5 minutes for tokens 5-30
 };
 
 // Redis client setup
@@ -181,6 +183,33 @@ app.post('/api/invalidate-cache', async (req, res) => {
     console.log(`Cache invalidated for key: ${key}`);
     
     res.json({ success: true, message: `Cache invalidated for key: ${key}` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add route for newest tokens (1-4)
+app.get('/api/newest-tokens', async (req, res) => {
+  try {
+    const cacheKey = 'newest_tokens_4';
+    const apiUrl = `${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=4`;
+    
+    const data = await getCachedOrFetch(cacheKey, apiUrl, CACHE_EXPIRY.NEWEST_TOKENS);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add route for older recent tokens (5-30)
+app.get('/api/older-recent-tokens', async (req, res) => {
+  try {
+    const { limit = 26 } = req.query;
+    const cacheKey = `older_recent_tokens_${limit}`;
+    const apiUrl = `${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=2&limit=${limit}`;
+    
+    const data = await getCachedOrFetch(cacheKey, apiUrl, CACHE_EXPIRY.OLDER_RECENT_TOKENS);
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

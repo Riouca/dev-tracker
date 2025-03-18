@@ -67,12 +67,13 @@ This is an unofficial tool for Odin.fun. Use at your own risk.
 
 ## Caching Strategy
 
-The application uses Redis for shared caching to reduce API request load. Different types of data have different cache expiry times:
+The application uses Redis for shared caching to reduce API request load. We implement a tiered caching strategy with different expiry times:
 
 - Dashboard data: 20 minutes
-- Recently launched tokens: 30 seconds
+- Most Recent Tokens (newest 4): 20 seconds 
+- Older Recent Tokens (5-30): 5 minutes
 
-This ensures dashboard data stays relatively fresh while significantly reducing API calls, while still keeping recently launched tokens almost real-time.
+This ensures up-to-the-minute coverage of brand new tokens while still maintaining efficient API usage for older data.
 
 ### Redis Setup
 

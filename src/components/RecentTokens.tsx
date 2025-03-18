@@ -12,7 +12,9 @@ import {
   getRarityLevel,
   CreatorPerformance,
   calculateCreatorPerformance,
-  getRecentlyLaunchedTokens
+  getRecentlyLaunchedTokens,
+  getNewestTokens,
+  getOlderRecentTokens
 } from '../services/api'
 import { formatPrice, formatDate, formatNumber, getTimeSince } from '../utils/formatters'
 
@@ -32,19 +34,25 @@ export function RecentTokens() {
   const [expandedCreator, setExpandedCreator] = useState<string | null>(null)
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all')
 
-  const fetchRecentTokens = async (forceRefresh = false) => {
+  const fetchRecentTokens = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      // Use our new function to get recently launched tokens with 30-sec cache
-      const recentTokens = await getRecentlyLaunchedTokens(15);
+      // Fetch newest tokens (refreshed every 20 seconds)
+      const newestTokens = await getNewestTokens();
+      
+      // Fetch older recent tokens (refreshed every 5 minutes)
+      const olderTokens = await getOlderRecentTokens();
+      
+      // Combine both sets of tokens
+      const allRecentTokens = [...newestTokens, ...olderTokens];
       
       // Process tokens and fetch creator data
       const tokensWithCreators: TokenWithCreator[] = []
       
       // Fetch creator performance for each token
-      for (const token of recentTokens) {
+      for (const token of allRecentTokens) {
         try {
           const creatorPerformance = await calculateCreatorPerformance(token.creator)
           tokensWithCreators.push({
@@ -193,20 +201,98 @@ export function RecentTokens() {
     fetchBTCPrice()
   }, [])
 
-  // Initial fetch and auto-refresh every 10 seconds
+  // Set different polling intervals for newest vs older tokens
   useEffect(() => {
-    // Fetch on component mount
+    // Fetch all tokens immediately
     fetchRecentTokens()
     
-    // Set up polling every 10 seconds 
-    const intervalId = setInterval(() => {
-      console.log('Auto-refreshing recent tokens...')
+    // Poll for all tokens every 5 minutes
+    const fullRefreshInterval = setInterval(() => {
+      console.log('Refreshing all recent tokens...')
       fetchRecentTokens()
-    }, 10000)
+    }, 300000) // 5 minutes
     
-    // Clear interval on component unmount
-    return () => clearInterval(intervalId)
-  }, [])
+    // More frequent polling just for newest tokens
+    const newestTokensInterval = setInterval(async () => {
+      try {
+        console.log('Refreshing newest tokens only...')
+        const newestTokens = await getNewestTokens()
+        
+        // Process newest tokens
+        const newestWithCreators = await Promise.all(
+          newestTokens.map(async (token) => {
+            try {
+              const creatorPerformance = await calculateCreatorPerformance(token.creator)
+              return {
+                token,
+                creator: creatorPerformance
+              }
+            } catch (err) {
+              return {
+                token,
+                creator: null
+              }
+            }
+          })
+        )
+        
+        // Update state by replacing only the newest tokens
+        setTokens(prevTokens => {
+          // Remove the 4 newest tokens (assuming they're at the start)
+          const olderTokens = prevTokens.slice(4)
+          // Add the new newest tokens at the start
+          return [...newestWithCreators, ...olderTokens]
+        })
+        
+        // Also update filtered tokens
+        setFilteredTokens(prevTokens => {
+          // Filter newest tokens based on current filter
+          const filteredNewest = filterTokensByConfidence(newestWithCreators, confidenceFilter)
+          // Get older tokens from current filtered tokens
+          const olderFiltered = prevTokens.filter(t => 
+            !newestTokens.some(n => n.id === t.token.id)
+          )
+          return [...filteredNewest, ...olderFiltered]
+        })
+        
+        setLastUpdated(new Date())
+      } catch (err) {
+        console.error('Error refreshing newest tokens:', err)
+      }
+    }, 20000) // 20 seconds
+    
+    // Clean up intervals on unmount
+    return () => {
+      clearInterval(fullRefreshInterval)
+      clearInterval(newestTokensInterval)
+    }
+  }, [confidenceFilter])
+
+  // Helper function to filter tokens by confidence level
+  const filterTokensByConfidence = (tokens: TokenWithCreator[], confidenceFilter: string): TokenWithCreator[] => {
+    if (confidenceFilter === 'all') {
+      return tokens;
+    }
+    
+    return tokens.filter(({ creator }) => {
+      if (!creator) return false;
+      
+      const score = creator.confidenceScore;
+      
+      switch (confidenceFilter) {
+        case 'legendary':
+          return score >= 90;
+        case 'high':
+          return score >= 70 && score < 90;
+        case 'medium':
+          return score >= 50 && score < 70;
+        case 'low':
+          return score < 50;
+        default:
+          return true;
+      }
+    });
+  }
 
   return (
     <div className="recent-tokens-container">
@@ -221,7 +307,7 @@ export function RecentTokens() {
         <div className="dashboard-actions">
           <div className="dashboard-actions-left">
             <span className="last-updated">
-              {lastUpdated ? `Last updated: ${formatLastUpdated(lastUpdated)}` : ''}
+              {lastUpdated ? `Last updated: ${getTimeSince(lastUpdated)}` : ''}
             </span>
             <div className="confidence-filter">
               <label htmlFor="confidence-filter">Filter by confidence:</label>
@@ -240,13 +326,6 @@ export function RecentTokens() {
             </div>
           </div>
           <div className="dashboard-actions-right">
-            <button 
-              className="refresh-button"
-              onClick={() => fetchRecentTokens(true)}
-              disabled={loading}
-            >
-              {loading ? 'Refreshing...' : 'Refresh Tokens'}
-            </button>
             <button 
               className="currency-toggle-button"
               onClick={() => setShowUSD(!showUSD)}
