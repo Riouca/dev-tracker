@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
 import { 
   getUser, 
   getUserImageUrl, 
@@ -12,11 +11,10 @@ import {
   Token as ApiToken,
   getRarityLevel,
   CreatorPerformance,
-  calculateCreatorPerformance
+  calculateCreatorPerformance,
+  getRecentlyLaunchedTokens
 } from '../services/api'
 import { formatPrice, formatDate, formatNumber, getTimeSince } from '../utils/formatters'
-
-const API_BASE_URL = 'https://api.odin.fun/v1'
 
 interface TokenWithCreator {
   token: ApiToken;
@@ -39,42 +37,35 @@ export function RecentTokens() {
       setLoading(true)
       setError(null)
       
-      // Use the direct API endpoint for recent tokens - limit to 15
-      const response = await axios.get(
-        `${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=15`
-      )
-      
-      const recentTokens = response.data.data || []
+      // Use our new function to get recently launched tokens with 30-sec cache
+      const recentTokens = await getRecentlyLaunchedTokens(15);
       
       // Process tokens and fetch creator data
       const tokensWithCreators: TokenWithCreator[] = []
       
+      // Fetch creator performance for each token
       for (const token of recentTokens) {
-        // Check if token is active
-        token.price_in_sats = convertPriceToSats(token.price)
-        isTokenActive(token)
-        
         try {
-          // Fetch creator performance data
           const creatorPerformance = await calculateCreatorPerformance(token.creator)
           tokensWithCreators.push({
-            token,
+            token: token,
             creator: creatorPerformance
           })
         } catch (err) {
-          console.error(`Error fetching creator for token ${token.id}:`, err)
+          console.error(`Error fetching creator data for token ${token.id}:`, err)
           tokensWithCreators.push({
-            token,
+            token: token,
             creator: null
           })
         }
       }
       
       setTokens(tokensWithCreators)
+      setFilteredTokens(tokensWithCreators)
       setLastUpdated(new Date())
-    } catch (error) {
-      console.error('Failed to fetch recent tokens:', error)
-      setError('Failed to load recent tokens')
+    } catch (err) {
+      console.error('Error fetching recent tokens:', err)
+      setError('Failed to fetch recent tokens. Please try again later.')
     } finally {
       setLoading(false)
     }
@@ -189,20 +180,32 @@ export function RecentTokens() {
     }
   };
 
+  // Fetch BTC price for USD conversion
   useEffect(() => {
-    fetchRecentTokens()
-    
-    // Fetch BTC price in USD
     const fetchBTCPrice = async () => {
       try {
-        const price = await getBTCPrice();
-        setUsdPrice(price);
-      } catch (error) {
-        console.error('Error fetching BTC price:', error);
+        const price = await getBTCPrice()
+        setUsdPrice(price)
+      } catch (err) {
+        console.error('Error fetching BTC price:', err)
       }
-    };
+    }
+    fetchBTCPrice()
+  }, [])
 
-    fetchBTCPrice();
+  // Initial fetch and auto-refresh every 10 seconds
+  useEffect(() => {
+    // Fetch on component mount
+    fetchRecentTokens()
+    
+    // Set up polling every 10 seconds 
+    const intervalId = setInterval(() => {
+      console.log('Auto-refreshing recent tokens...')
+      fetchRecentTokens()
+    }, 10000)
+    
+    // Clear interval on component unmount
+    return () => clearInterval(intervalId)
   }, [])
 
   return (

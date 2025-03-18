@@ -64,3 +64,39 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Disclaimer
 
 This is an unofficial tool for Odin.fun. Use at your own risk.
+
+## Caching Strategy
+
+The application uses Redis for shared caching to reduce API request load. Different types of data have different cache expiry times:
+
+- Dashboard data: 20 minutes
+- Recently launched tokens: 30 seconds
+
+This ensures dashboard data stays relatively fresh while significantly reducing API calls, while still keeping recently launched tokens almost real-time.
+
+### Redis Setup
+
+1. Install Redis on your local machine or use a Redis service
+2. Start Redis server: `redis-server`
+3. The server automatically connects to Redis at `redis://localhost:6379`
+
+### Running the Application
+
+```bash
+# Install dependencies
+cd dev-tracker
+npm install
+cd server
+npm install
+
+# Start the server and frontend together
+cd ..
+npm run dev:full
+
+# Or start them separately
+# Terminal 1: Start the server
+npm run server
+
+# Terminal 2: Start the frontend
+npm run dev
+```

@@ -1,6 +1,13 @@
 import axios from 'axios';
+import { getFromRedis, setInRedis } from './redis';
 
+// Use the proxy server
+const PROXY_BASE_URL = 'http://localhost:4000/api';
 const API_BASE_URL = 'https://api.odin.fun/v1';
+
+const REDIS_TOP_TOKENS_KEY = 'dev_tracker_top_tokens';
+const REDIS_TOKEN_KEY = 'dev_tracker_token';
+const REDIS_CREATOR_TOKENS_KEY = 'dev_tracker_creator_tokens';
 
 export interface Token {
   id: string;
@@ -278,13 +285,24 @@ export const isTokenActive = (token: Token): boolean => {
 // Fetch token data by ID
 export const getToken = async (tokenId: string): Promise<Token> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/token/${tokenId}`);
+    // Use proxy server
+    const response = await axios.get(`${PROXY_BASE_URL}/token/${tokenId}`);
     const token = response.data;
     token.price_in_sats = convertPriceToSats(token.price);
     isTokenActive(token); // Check and set activity status
+    
     return token;
   } catch (error) {
     console.error('Error fetching token:', error);
+    
+    // Fallback to cache if proxy server fails
+    const redisKey = `${REDIS_TOKEN_KEY}_${tokenId}`;
+    const redisData = await getFromRedis<Token>(redisKey);
+    if (redisData) {
+      console.log(`Proxy failed, using cached token data as fallback for ${tokenId}`);
+      return redisData;
+    }
+    
     throw error;
   }
 };
@@ -292,7 +310,8 @@ export const getToken = async (tokenId: string): Promise<Token> => {
 // Fetch user data by principal
 export const getUser = async (principal: string): Promise<User> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/user/${principal}`);
+    // Use proxy server
+    const response = await axios.get(`${PROXY_BASE_URL}/user/${principal}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching user:', error);
@@ -303,7 +322,10 @@ export const getUser = async (principal: string): Promise<User> => {
 // Fetch recent trades for a token
 export const getTokenTrades = async (tokenId: string, limit = 50): Promise<Trade[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/token/${tokenId}/trades?limit=${limit}`);
+    // Use proxy server
+    const response = await axios.get(`${PROXY_BASE_URL}/token/${tokenId}/trades`, {
+      params: { limit }
+    });
     return response.data.data;
   } catch (error) {
     console.error('Error fetching token trades:', error);
@@ -314,7 +336,11 @@ export const getTokenTrades = async (tokenId: string, limit = 50): Promise<Trade
 // Fetch top tokens by marketcap
 export const getTopTokens = async (limit = 30, sort = 'marketcap'): Promise<Token[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/tokens?sort=${sort}%3Adesc&page=1&limit=${limit}`);
+    // Use proxy server
+    const response = await axios.get(`${PROXY_BASE_URL}/tokens`, {
+      params: { limit, sort }
+    });
+    
     const tokens = response.data.data || [];
     
     // Add price_in_sats and check activity status for each token
@@ -325,6 +351,15 @@ export const getTopTokens = async (limit = 30, sort = 'marketcap'): Promise<Toke
     });
   } catch (error) {
     console.error('Error fetching top tokens:', error);
+    
+    // Fallback to cache if proxy server fails
+    const redisKey = `${REDIS_TOP_TOKENS_KEY}_${sort}_${limit}`;
+    const redisData = await getFromRedis<Token[]>(redisKey);
+    if (redisData) {
+      console.log(`Proxy failed, using cached top tokens as fallback for sort=${sort}, limit=${limit}`);
+      return redisData;
+    }
+    
     return [];
   }
 };
@@ -332,7 +367,11 @@ export const getTopTokens = async (limit = 30, sort = 'marketcap'): Promise<Toke
 // Fetch tokens created by a specific creator
 export const getCreatorTokens = async (principal: string, limit = 20): Promise<Token[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/tokens?creator=${principal}&limit=${limit}`);
+    // Use proxy server
+    const response = await axios.get(`${PROXY_BASE_URL}/creator/${principal}/tokens`, {
+      params: { limit }
+    });
+    
     const tokens = response.data.data || [];
     
     // Add price_in_sats and check activity status for each token
@@ -343,6 +382,15 @@ export const getCreatorTokens = async (principal: string, limit = 20): Promise<T
     });
   } catch (error) {
     console.error('Error fetching creator tokens:', error);
+    
+    // Fallback to cache if proxy server fails
+    const redisKey = `${REDIS_CREATOR_TOKENS_KEY}_${principal}_${limit}`;
+    const redisData = await getFromRedis<Token[]>(redisKey);
+    if (redisData) {
+      console.log(`Proxy failed, using cached creator tokens as fallback for ${principal}`);
+      return redisData;
+    }
+    
     return [];
   }
 };
@@ -479,10 +527,13 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
 // Get user balances
 export const getUserBalances = async (principal: string): Promise<any> => {
   try {
-    const timestamp = new Date().toISOString();
-    const response = await axios.get(
-      `${API_BASE_URL}/user/${principal}/balances?lp=true&limit=999999&timestamp=${encodeURIComponent(timestamp)}`
-    );
+    // Use proxy server
+    const response = await axios.get(`${PROXY_BASE_URL}/user/${principal}/balances`, {
+      params: {
+        lp: true,
+        limit: 999999
+      }
+    });
     return response.data;
   } catch (error) {
     console.error('Error fetching user balances:', error);
@@ -497,6 +548,7 @@ export type CreatorSortOption = 'volume' | 'active' | 'weighted' | 'confidence' 
 const CREATORS_CACHE_KEY = 'forseti_creators_cache';
 const CREATORS_CACHE_TIMESTAMP_KEY = 'forseti_creators_cache_timestamp';
 const CACHE_EXPIRY_TIME = 30 * 60 * 1000; // 30 minutes in milliseconds
+const REDIS_CACHE_KEY = 'dev_tracker_creators_data';
 
 // Helper function to retry API calls
 const retryApiCall = async <T>(
@@ -529,35 +581,19 @@ export const findTopCreators = async (
   sortBy: CreatorSortOption = 'confidence'
 ): Promise<CreatorPerformance[]> => {
   try {
-    // Check if we have cached data in session storage
-    const cachedData = sessionStorage.getItem(CREATORS_CACHE_KEY);
-    const cachedTimestamp = sessionStorage.getItem(CREATORS_CACHE_TIMESTAMP_KEY);
+    // Try to get data from cache
+    const redisData = await getFromRedis<CreatorPerformance[]>(REDIS_CACHE_KEY);
     
-    // If we have cached data and it's not expired, use it
-    if (cachedData && cachedTimestamp) {
-      const timestamp = parseInt(cachedTimestamp, 10);
-      const now = Date.now();
-      
-      // Check if cache is still valid (not expired)
-      if (now - timestamp < CACHE_EXPIRY_TIME) {
-        console.log('Using cached creators data from session storage');
-        const parsedData = JSON.parse(cachedData);
-        
-        // Sort the cached data based on the requested sort option
-        return sortCreatorsData(parsedData, sortBy, limit);
-      }
+    if (redisData) {
+      console.log('Using cached creators data');
+      return sortCreatorsData(redisData, sortBy, limit);
     }
     
-    // If no valid cache, fetch fresh data
-    console.log('Fetching fresh creators data from API');
+    // If no valid cache, fetch fresh data through the proxy
+    console.log('Fetching creators data through topTokens');
     
-    // Use the direct API endpoint to get top tokens with retry logic
-    const response = await retryApiCall(() => 
-      axios.get(`${API_BASE_URL}/tokens?sort=marketcap%3Adesc&page=1&limit=200`)
-    );
-    
-    const topTokens = response.data.data || [];
-    
+    // We'll get top tokens first through the proxy
+    const topTokens = await getTopTokens(200);
     console.log(`Fetched ${topTokens.length} top tokens by marketcap`);
     
     // Extract unique creator principals
@@ -567,7 +603,6 @@ export const findTopCreators = async (
         creatorSet.add(token.creator);
       }
     });
-    
     
     const creatorPrincipals = Array.from(creatorSet);
     console.log(`Found ${creatorPrincipals.length} unique creators from top tokens`);
@@ -580,21 +615,24 @@ export const findTopCreators = async (
     
     console.log(`Successfully calculated performance for ${validPerformances.length} creators`);
     
-    // Cache the data in session storage
-    sessionStorage.setItem(CREATORS_CACHE_KEY, JSON.stringify(validPerformances));
-    sessionStorage.setItem(CREATORS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+    // Cache the data
+    try {
+      await setInRedis(REDIS_CACHE_KEY, validPerformances, CACHE_EXPIRY_TIME / 1000);
+      console.log('Successfully cached creators data');
+    } catch (error) {
+      console.error('Failed to cache creators data:', error);
+    }
     
     // Sort and return the data
     return sortCreatorsData(validPerformances, sortBy, limit);
   } catch (error) {
     console.error('Error finding top creators:', error);
     
-    // If API fails, try to use cached data even if expired
-    const cachedData = sessionStorage.getItem(CREATORS_CACHE_KEY);
-    if (cachedData) {
-      console.log('API failed, using cached creators data as fallback');
-      const parsedData = JSON.parse(cachedData);
-      return sortCreatorsData(parsedData, sortBy, limit);
+    // Try to use cached data even if expired
+    const redisData = await getFromRedis<CreatorPerformance[]>(REDIS_CACHE_KEY);
+    if (redisData) {
+      console.log('Error in processing, using cached creators data as fallback');
+      return sortCreatorsData(redisData, sortBy, limit);
     }
     
     return [];
@@ -720,5 +758,41 @@ export const findTopTraders = async (limit = 10): Promise<TraderPerformance[]> =
   } catch (error) {
     console.error('Error finding top traders:', error);
     return [];
+  }
+};
+
+// Fetch recently launched tokens with shorter cache time
+export const getRecentlyLaunchedTokens = async (limit = 20): Promise<Token[]> => {
+  try {
+    // Use dedicated endpoint with short cache time
+    const response = await axios.get(`${PROXY_BASE_URL}/recent-tokens`, {
+      params: { limit }
+    });
+    
+    const tokens = response.data.data || [];
+    
+    // Add price_in_sats and check activity status for each token
+    return tokens.map((token: Token) => {
+      token.price_in_sats = convertPriceToSats(token.price);
+      isTokenActive(token);
+      return token;
+    });
+  } catch (error) {
+    console.error('Error fetching recently launched tokens:', error);
+    
+    // Fallback to direct API call if proxy fails
+    try {
+      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=${limit}`);
+      const tokens = response.data.data || [];
+      
+      return tokens.map((token: Token) => {
+        token.price_in_sats = convertPriceToSats(token.price);
+        isTokenActive(token);
+        return token;
+      });
+    } catch (directError) {
+      console.error('Direct API fallback failed:', directError);
+      return [];
+    }
   }
 }; 
