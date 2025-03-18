@@ -431,6 +431,8 @@ export const calculateCreatorPerformance = async (
     let activeTokens = 0;
     let totalHolders = 0;
     let totalTrades = 0;
+    let totalPrice = 0;
+    let activeTokensWithPrice = 0;
     
     tokens.forEach(token => {
       if (token.volume > 0) {
@@ -439,11 +441,21 @@ export const calculateCreatorPerformance = async (
       
       if (token.is_active) {
         activeTokens++;
+        // Ajouter le prix au total seulement pour les tokens actifs
+        const priceInSats = token.price_in_sats || token.price / 1000;
+        if (priceInSats > 0) {
+          totalPrice += priceInSats;
+          activeTokensWithPrice++;
+        }
       }
       
       totalHolders += token.holder_count || 0;
       totalTrades += (token.buy_count || 0) + (token.sell_count || 0);
     });
+    
+    // Calculer le prix moyen des tokens actifs
+    const avgTokenPrice = activeTokensWithPrice > 0 ? totalPrice / activeTokensWithPrice : 0;
+    console.log(`Average price for active tokens of ${user.username}: ${avgTokenPrice.toFixed(3)} sats`);
     
     // Calculate success rate based on active tokens
     const successRate = tokens.length > 0 ? (activeTokens / tokens.length) * 100 : 0;
@@ -463,10 +475,11 @@ export const calculateCreatorPerformance = async (
     const weightedScore = (normalizedVolume * volumeWeight) + (normalizedActiveTokens * activeTokenWeight);
     
     // Calculate confidence score with various factors
-    const successWeight = 0.70;  // 70% weight for success rate
-    const volumeWeight2 = 0.20;  // 20% weight for volume
-    const holdersWeight = 0.08;  // 8% weight for holders
-    const tradesWeight = 0.02;   // 2% weight for trades
+    const successWeight = 0.30;  // 30% weight for success rate
+    const volumeWeight2 = 0.25;  // 25% weight for volume
+    const holdersWeight = 0.20;  // 20% weight for holders
+    const tradesWeight = 0.05;   // 5% weight for trades
+    const priceWeight = 0.20;    // 20% weight for avg token price
     
     // Calculate individual scores
     const successScore = Math.min(100, successRate);
@@ -483,12 +496,17 @@ export const calculateCreatorPerformance = async (
     // 1000 trades would be a perfect score
     const tradesScore = Math.min(100, Math.log10(totalTrades + 1) * 33.3);
     
+    // Price score - based on average token price
+    // Logarithmic scale: 1 sats = ~33%, 10 sats = ~67%, 100 sats = 100%
+    const priceScore = avgTokenPrice > 0 ? Math.min(100, Math.log10(avgTokenPrice * 100 + 1) * 33.3) : 0;
+    
     // Calculate final confidence score without random factor
     let confidenceScore = (
       (successScore * successWeight) +
       (volumeScore * volumeWeight2) +
       (holdersScore * holdersWeight) +
-      (tradesScore * tradesWeight)
+      (tradesScore * tradesWeight) +
+      (priceScore * priceWeight)
     );
     
     // Cap confidence score at 100
@@ -509,6 +527,8 @@ export const calculateCreatorPerformance = async (
       volumeScore: volumeScore.toFixed(2),
       holdersScore: holdersScore.toFixed(2),
       tradesScore: tradesScore.toFixed(2),
+      priceScore: priceScore.toFixed(2),
+      avgTokenPrice: avgTokenPrice.toFixed(3),
       finalScore: confidenceScore.toFixed(2)
     });
     
