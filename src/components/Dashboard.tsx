@@ -12,6 +12,7 @@ export function Dashboard() {
   const [followedCreatorsCount, setFollowedCreatorsCount] = useState(0)
   const [activeTab, setActiveTab] = useState<'top' | 'followed'>('top')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [displayTime, setDisplayTime] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
   const [usdPrice, setUsdPrice] = useState<number | null>(null)
   
@@ -87,6 +88,23 @@ export function Dashboard() {
     }
   }, [searchQuery, creators])
 
+  // Add effect to refresh the "Last updated" display every minute
+  useEffect(() => {
+    if (!lastUpdated) return
+    
+    // Initial format
+    setDisplayTime(formatLastUpdated(lastUpdated))
+    
+    // Update the time display every second
+    const timeDisplayInterval = setInterval(() => {
+      if (lastUpdated) {
+        setDisplayTime(formatLastUpdated(lastUpdated))
+      }
+    }, 1000)
+    
+    return () => clearInterval(timeDisplayInterval)
+  }, [lastUpdated])
+
   const loadCreators = async () => {
     try {
       setLoading(true)
@@ -122,21 +140,23 @@ export function Dashboard() {
 
   // Format the last updated time
   const formatLastUpdated = (date: Date) => {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffSecs = Math.floor(diffMs / 1000)
     
-    if (diffMins < 1) return 'Just now';
-    if (diffMins === 1) return '1 minute ago';
-    if (diffMins < 60) return `${diffMins} minutes ago`;
+    if (diffSecs < 60) return 'Just now'
     
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours === 1) return '1 hour ago';
-    if (diffHours < 24) return `${diffHours} hours ago`;
+    const diffMins = Math.floor(diffSecs / 60)
+    if (diffMins === 1) return '1 minute ago'
+    if (diffMins < 60) return `${diffMins} minutes ago`
     
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays === 1) return 'Yesterday';
-    return `${diffDays} days ago`;
+    const diffHours = Math.floor(diffMins / 60)
+    if (diffHours === 1) return '1 hour ago'
+    if (diffHours < 24) return `${diffHours} hours ago`
+    
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays === 1) return 'Yesterday'
+    return `${diffDays} days ago`
   }
 
   const sortCreators = (sortOption: CreatorSortOption, direction: 'asc' | 'desc' = 'desc') => {
@@ -389,9 +409,6 @@ export function Dashboard() {
       
       <div className="dashboard-actions">
         <div className="dashboard-actions-left">
-          <span className="last-updated">
-            {lastUpdated ? `Last updated: ${formatLastUpdated(lastUpdated)}` : ''}
-          </span>
           <div className="search-container">
             <input
               type="text"
@@ -485,6 +502,12 @@ export function Dashboard() {
           </div>
           
           {renderPagination()}
+          
+          <div className="last-updated-footer">
+            <span className="last-updated">
+              {lastUpdated ? `Last updated: ${displayTime}` : ''}
+            </span>
+          </div>
         </>
       )}
     </div>

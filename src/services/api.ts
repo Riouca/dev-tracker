@@ -396,10 +396,25 @@ export const getCreatorTokens = async (principal: string, limit = 20): Promise<T
 };
 
 // Calculate performance metrics for a token creator
-export const calculateCreatorPerformance = async (principal: string): Promise<CreatorPerformance | null> => {
+export const calculateCreatorPerformance = async (
+  principal: string,
+  forceRefresh = false
+): Promise<CreatorPerformance | null> => {
   try {
+    // Create cache key for this creator's performance
+    const cacheKey = `creator_performance_${principal}`;
+    
+    // Check for cached performance if not forcing refresh
+    if (!forceRefresh) {
+      const cachedPerformance = await getFromRedis<CreatorPerformance>(cacheKey);
+      if (cachedPerformance) {
+        return cachedPerformance;
+      }
+    }
+    
+    // If forcing refresh or no cache, calculate fresh performance
     const user = await getUser(principal);
-    const tokens = await getCreatorTokens(principal);
+    const tokens = await getCreatorTokens(principal, 25);
     
     if (!user || tokens.length === 0) {
       return null;
@@ -447,8 +462,7 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
     // Calculate weighted score
     const weightedScore = (normalizedVolume * volumeWeight) + (normalizedActiveTokens * activeTokenWeight);
     
-    // Calculate confidence score (0-100) with different weights for each factor
-    // Success rate is most important, followed by volume, holders, and trades
+    // Calculate confidence score with various factors
     const successWeight = 0.70;  // 70% weight for success rate
     const volumeWeight2 = 0.20;  // 20% weight for volume
     const holdersWeight = 0.08;  // 8% weight for holders
@@ -498,7 +512,7 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
       finalScore: confidenceScore.toFixed(2)
     });
     
-    return {
+    const creatorPerformance = {
       principal,
       username: user.username,
       image: user.image,
@@ -518,6 +532,15 @@ export const calculateCreatorPerformance = async (principal: string): Promise<Cr
         return priceB - priceA;
       }).slice(0, 25)
     };
+    
+    // Cache the calculated performance
+    try {
+      await setInRedis(cacheKey, creatorPerformance, 300); // Cache for 5 minutes
+    } catch (error) {
+      console.error('Failed to cache creator performance:', error);
+    }
+    
+    return creatorPerformance;
   } catch (error) {
     console.error('Error calculating creator performance:', error);
     return null;
@@ -863,6 +886,38 @@ export const getOlderRecentTokens = async (limit = 26): Promise<Token[]> => {
     } catch (directError) {
       console.error('Direct API fallback failed:', directError);
       return [];
+    }
+  }
+};
+
+// Get fresh token holder data (refreshed every minute)
+export const getTokenHolderData = async (tokenId: string): Promise<{ 
+  holder_count: number, 
+  holder_top: number, 
+  holder_dev: number 
+}> => {
+  try {
+    // Use dedicated endpoint with short cache time
+    const response = await axios.get(`${PROXY_BASE_URL}/token/${tokenId}/holders`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching token holder data for ${tokenId}:`, error);
+    
+    // Fallback to regular token endpoint if holder endpoint fails
+    try {
+      const tokenData = await getToken(tokenId);
+      return {
+        holder_count: tokenData.holder_count,
+        holder_top: tokenData.holder_top,
+        holder_dev: tokenData.holder_dev
+      };
+    } catch (fallbackError) {
+      console.error('Fallback fetch failed:', fallbackError);
+      return {
+        holder_count: 0,
+        holder_top: 0,
+        holder_dev: 0
+      };
     }
   }
 }; 

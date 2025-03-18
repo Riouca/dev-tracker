@@ -14,7 +14,8 @@ import {
   calculateCreatorPerformance,
   getRecentlyLaunchedTokens,
   getNewestTokens,
-  getOlderRecentTokens
+  getOlderRecentTokens,
+  getTokenHolderData
 } from '../services/api'
 import { formatPrice, formatDate, formatNumber, getTimeSince } from '../utils/formatters'
 
@@ -31,6 +32,7 @@ export function RecentTokens() {
   const [showUSD, setShowUSD] = useState(true) // Default to USD display
   const [usdPrice, setUsdPrice] = useState<number | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [displayTime, setDisplayTime] = useState<string>('')
   const [expandedCreator, setExpandedCreator] = useState<string | null>(null)
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all')
 
@@ -48,13 +50,13 @@ export function RecentTokens() {
       // Combine both sets of tokens
       const allRecentTokens = [...newestTokens, ...olderTokens];
       
-      // Process tokens and fetch creator data
+      // Process tokens and fetch creator data with force refresh
       const tokensWithCreators: TokenWithCreator[] = []
       
-      // Fetch creator performance for each token
+      // Fetch creator performance for each token with force refresh for accurate metrics
       for (const token of allRecentTokens) {
         try {
-          const creatorPerformance = await calculateCreatorPerformance(token.creator)
+          const creatorPerformance = await calculateCreatorPerformance(token.creator, true)
           tokensWithCreators.push({
             token: token,
             creator: creatorPerformance
@@ -145,13 +147,15 @@ export function RecentTokens() {
     }
   };
 
-  // Format the last updated time
+  // Format the last updated time with seconds
   const formatLastUpdated = (date: Date) => {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+    const diffSecs = Math.floor(diffMs / 1000);
     
-    if (diffMins < 1) return 'Just now';
+    if (diffSecs < 60) return `${diffSecs} seconds ago`;
+    
+    const diffMins = Math.floor(diffSecs / 60);
     if (diffMins === 1) return '1 minute ago';
     if (diffMins < 60) return `${diffMins} minutes ago`;
     
@@ -218,11 +222,12 @@ export function RecentTokens() {
         console.log('Refreshing newest tokens only...')
         const newestTokens = await getNewestTokens()
         
-        // Process newest tokens
+        // Process newest tokens with fresh confidence scores
         const newestWithCreators = await Promise.all(
           newestTokens.map(async (token) => {
             try {
-              const creatorPerformance = await calculateCreatorPerformance(token.creator)
+              // Calculate fresh confidence score and token metrics
+              const creatorPerformance = await calculateCreatorPerformance(token.creator, true)
               return {
                 token,
                 creator: creatorPerformance
@@ -294,6 +299,79 @@ export function RecentTokens() {
     });
   }
 
+  // Add new effect for refreshing holder counts for displayed tokens
+  useEffect(() => {
+    if (tokens.length === 0) return;
+    
+    // Refresh holder counts every minute
+    const holderCountInterval = setInterval(async () => {
+      try {
+        console.log('Refreshing token holder counts...');
+        
+        // Create a copy of the current tokens
+        const updatedTokens = [...tokens];
+        let hasChanges = false;
+        
+        // Update holder counts for the displayed tokens
+        for (let i = 0; i < updatedTokens.length; i++) {
+          const tokenItem = updatedTokens[i];
+          const tokenId = tokenItem.token.id;
+          
+          try {
+            // Get fresh holder data
+            const holderData = await getTokenHolderData(tokenId);
+            
+            // Check if holder count has changed
+            if (holderData.holder_count !== tokenItem.token.holder_count) {
+              hasChanges = true;
+              
+              // Update the token with new holder data
+              updatedTokens[i] = {
+                ...tokenItem,
+                token: {
+                  ...tokenItem.token,
+                  holder_count: holderData.holder_count,
+                  holder_top: holderData.holder_top,
+                  holder_dev: holderData.holder_dev
+                }
+              };
+            }
+          } catch (error) {
+            console.error(`Error updating holder count for token ${tokenId}:`, error);
+          }
+        }
+        
+        // Only update state if holder counts have changed
+        if (hasChanges) {
+          setTokens(updatedTokens);
+          setFilteredTokens(filterTokensByConfidence(updatedTokens, confidenceFilter));
+          setLastUpdated(new Date());
+        }
+      } catch (err) {
+        console.error('Error refreshing holder counts:', err);
+      }
+    }, 60000); // Every minute
+    
+    return () => clearInterval(holderCountInterval);
+  }, [tokens, confidenceFilter]);
+
+  // Add effect to update the "Last updated" display every second
+  useEffect(() => {
+    if (!lastUpdated) return;
+    
+    // Initial format
+    setDisplayTime(formatLastUpdated(lastUpdated));
+    
+    // Update the time display every second
+    const timeDisplayInterval = setInterval(() => {
+      if (lastUpdated) {
+        setDisplayTime(formatLastUpdated(lastUpdated));
+      }
+    }, 1000);
+    
+    return () => clearInterval(timeDisplayInterval);
+  }, [lastUpdated]);
+
   return (
     <div className="recent-tokens-container">
       <div className="recent-tokens">
@@ -307,7 +385,7 @@ export function RecentTokens() {
         <div className="dashboard-actions">
           <div className="dashboard-actions-left">
             <span className="last-updated">
-              {lastUpdated ? `Last updated: ${getTimeSince(lastUpdated)}` : ''}
+              {lastUpdated ? `Last updated: ${displayTime}` : ''}
             </span>
             <div className="confidence-filter">
               <label htmlFor="confidence-filter">Filter by confidence:</label>

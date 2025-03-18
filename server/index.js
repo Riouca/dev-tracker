@@ -12,7 +12,8 @@ const CACHE_EXPIRY = {
   DEFAULT: 20 * 60,           // 20 minutes for most endpoints
   RECENT_TOKENS: 30,          // 30 seconds for recently launched tokens
   NEWEST_TOKENS: 20,          // 20 seconds for the 4 newest tokens
-  OLDER_RECENT_TOKENS: 5 * 60 // 5 minutes for tokens 5-30
+  OLDER_RECENT_TOKENS: 5 * 60, // 5 minutes for tokens 5-30
+  TOKEN_HOLDERS: 60           // 1 minute for token holder counts
 };
 
 // Redis client setup
@@ -210,6 +211,30 @@ app.get('/api/older-recent-tokens', async (req, res) => {
     
     const data = await getCachedOrFetch(cacheKey, apiUrl, CACHE_EXPIRY.OLDER_RECENT_TOKENS);
     res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add route for token holder data with shorter cache time
+app.get('/api/token/:id/holders', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cacheKey = `token_holders_${id}`;
+    const apiUrl = `${API_BASE_URL}/token/${id}`;
+    
+    const data = await getCachedOrFetch(cacheKey, apiUrl, CACHE_EXPIRY.TOKEN_HOLDERS);
+    
+    // Extract only the holder-related data to reduce response size
+    const holderData = {
+      id: data.id,
+      name: data.name,
+      holder_count: data.holder_count,
+      holder_top: data.holder_top,
+      holder_dev: data.holder_dev
+    };
+    
+    res.json(holderData);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
