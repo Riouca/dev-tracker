@@ -255,24 +255,34 @@ export const isTokenActive = (token: Token): boolean => {
   }
   
   const priceInSats = token.price_in_sats;
+  const now = new Date();
+  const tokenCreationDate = new Date(token.created_time);
   const lastActionDate = new Date(token.last_action_time);
-  const eightDaysAgo = new Date();
-  eightDaysAgo.setDate(eightDaysAgo.getDate() - 8);
   
-  // Token is active if price >= 0.15 sats AND it has activity in the last 8 days
-  const isActive = priceInSats >= 0.15 && lastActionDate > eightDaysAgo;
+  // Check if token is older than 15 minutes
+  const isOlderThan15Min = now.getTime() - tokenCreationDate.getTime() > 15 * 60 * 1000;
   
-  // Set reason for inactivity
+  // Check if token had no transactions in the last 3 days
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+  const noRecentActivity = lastActionDate < threeDaysAgo;
+  
+  // New inactive rules:
+  // 1. Price under 0.2 sats and older than 15 minutes
+  // 2. Price under 0.4 sats, older than 15 minutes, and no transactions in 3 days
+  let isActive = true;
   let inactiveReason = '';
-  if (!isActive) {
-    if (priceInSats < 0.15) {
-      inactiveReason += 'Low price';
-    }
-    
-    if (lastActionDate <= eightDaysAgo) {
-      inactiveReason += inactiveReason ? ' & ' : '';
-      inactiveReason += 'No recent activity';
-    }
+  
+  // Rule 1: Token under 0.2 sats and older than 15 minutes
+  if (priceInSats < 0.2 && isOlderThan15Min) {
+    isActive = false;
+    inactiveReason = 'Low price (< 0.2 sats)';
+  }
+  
+  // Rule 2: Token under 0.4 sats, older than 15 minutes, and no activity in 3 days
+  if (priceInSats < 0.4 && isOlderThan15Min && noRecentActivity) {
+    isActive = false;
+    inactiveReason = inactiveReason ? `${inactiveReason} & No recent activity` : 'Low price (< 0.4 sats) & No recent activity';
   }
   
   // Update token with activity status
@@ -762,7 +772,7 @@ export const getRarityLevel = (score: number): string => {
   if (score >= 80) return 'great';        // Blue
   if (score >= 70) return 'okay';         // Green
   if (score >= 60) return 'neutral';      // White
-  if (score >= 45) return 'meh';          // Gray
+  if (score >= 45) return 'meh';          // Dark Orange (amber-600)
   if (score >= 30) return 'scam';         // Brown
   return 'scam';                          // Red
 };

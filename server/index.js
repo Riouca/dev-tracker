@@ -9,11 +9,11 @@ const API_BASE_URL = 'https://api.odin.fun/v1';
 
 // Cache expiry times in seconds
 const CACHE_EXPIRY = {
-  DEFAULT: 20 * 60,           // 20 minutes for most endpoints
-  RECENT_TOKENS: 30,          // 30 seconds for recently launched tokens
-  NEWEST_TOKENS: 20,          // 20 seconds for the 4 newest tokens
-  OLDER_RECENT_TOKENS: 5 * 60, // 5 minutes for tokens 5-30
-  TOKEN_HOLDERS: 60           // 1 minute for token holder counts
+  DEFAULT: parseInt(process.env.DEFAULT_CACHE_EXPIRY || 1200),      // 20 minutes for dashboard
+  RECENT_TOKENS: 30,                                                // 30 seconds for recently launched tokens
+  NEWEST_TOKENS: parseInt(process.env.NEWEST_TOKENS_EXPIRY || 20),  // 20 seconds for 4 newest tokens
+  OLDER_RECENT_TOKENS: parseInt(process.env.OLDER_TOKENS_EXPIRY || 120), // 2 minutes for older recent tokens
+  TOKEN_HOLDERS: 60                                                 // 1 minute for token holder counts
 };
 
 // Redis client setup

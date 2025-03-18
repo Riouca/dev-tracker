@@ -17,7 +17,7 @@ import {
   getOlderRecentTokens,
   getTokenHolderData
 } from '../services/api'
-import { formatPrice, formatDate, formatNumber, getTimeSince } from '../utils/formatters'
+import { formatPrice, formatDate, formatNumber, getTimeSince, formatDeveloperHoldings } from '../utils/formatters'
 
 interface TokenWithCreator {
   token: ApiToken;
@@ -33,7 +33,7 @@ export function RecentTokens() {
   const [usdPrice, setUsdPrice] = useState<number | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [displayTime, setDisplayTime] = useState<string>('')
-  const [expandedCreator, setExpandedCreator] = useState<string | null>(null)
+  const [expandedCreators, setExpandedCreators] = useState<Set<string>>(new Set())
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all')
 
   const fetchRecentTokens = async () => {
@@ -177,19 +177,24 @@ export function RecentTokens() {
       case 'great': return 'text-blue-400';       // Blue
       case 'okay': return 'text-green-400';       // Green
       case 'neutral': return 'text-gray-100';     // White
-      case 'meh': return 'text-gray-400';         // Gray
+      case 'meh': return 'text-amber-600';        // Dark Orange
       case 'scam': return 'text-red-500';         // Red
       default: return 'text-red-500';             // Red
     }
   };
 
   // Toggle expanded creator
-  const toggleExpandCreator = (principal: string) => {
-    if (expandedCreator === principal) {
-      setExpandedCreator(null);
-    } else {
-      setExpandedCreator(principal);
-    }
+  const toggleExpandCreator = (principal: string, tokenId: string) => {
+    const uniqueId = `${principal}-${tokenId}`;
+    setExpandedCreators(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(uniqueId)) {
+        newSet.delete(uniqueId);
+      } else {
+        newSet.add(uniqueId);
+      }
+      return newSet;
+    });
   };
 
   // Fetch BTC price for USD conversion
@@ -433,7 +438,7 @@ export function RecentTokens() {
             {filteredTokens.map(({ token, creator }) => (
               <div 
                 key={token.id} 
-                className={`creator-card ${expandedCreator === creator?.principal ? 'expanded' : ''}`}
+                className={`creator-card ${expandedCreators.has(`${creator?.principal}-${token.id}`) ? 'expanded' : ''}`}
               >
                 <div 
                   className="creator-header" 
@@ -453,7 +458,7 @@ export function RecentTokens() {
                     </div>
                     <div className="creator-details">
                       <div className="creator-title">
-                        <h3 className="creator-name">{token.name}</h3>
+                        <h3 className={`creator-name ${creator ? getRarityColor(creator.confidenceScore) : ''}`}>{token.name}</h3>
                         <span className="token-ticker">${token.ticker || token.name.substring(0, 4).toUpperCase()}</span>
                       </div>
                       <div className="creator-metrics">
@@ -486,15 +491,19 @@ export function RecentTokens() {
                     <div className="stat-label">Marketcap</div>
                   </div>
                   <div className="creator-stat">
-                    <div className="stat-value">{formatNumber(token.buy_count + token.sell_count)}</div>
-                    <div className="stat-label">Trades</div>
+                    <div className="stat-value">{formatDeveloperHoldings(token.holder_dev, token.total_supply)}</div>
+                    <div className="stat-label">Dev Holdings</div>
                   </div>
                 </div>
                 
                 {creator ? (
                   <div 
-                    className={`creator-tokens ${expandedCreator === creator.principal ? 'expanded' : ''}`}
-                    onClick={() => creator && toggleExpandCreator(creator.principal)}
+                    className={`creator-tokens ${expandedCreators.has(`${creator.principal}-${token.id}`) ? 'expanded' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleExpandCreator(creator.principal, token.id);
+                    }}
+                    title="Click to see developer's other tokens"
                   >
                     <div className="token-list-header">
                       <h4>Developer Info</h4>
@@ -526,7 +535,7 @@ export function RecentTokens() {
                             <span className="metric-label">Confidence:</span> 
                             <span className={getRarityColor(creator.confidenceScore)}>{creator.confidenceScore.toFixed(1)}%</span>
                           </div>
-                          <div className="creator-tokens">
+                          <div className="creator-tokens-count">
                             <span className="metric-label">Tokens:</span> 
                             <span>{creator.activeTokens}/{creator.totalTokens}</span>
                           </div>
@@ -534,49 +543,65 @@ export function RecentTokens() {
                       </div>
                     </div>
                     
-                    {expandedCreator === creator.principal && (
+                    {expandedCreators.has(`${creator.principal}-${token.id}`) && (
                       <div className="token-list">
-                        {creator.tokens.slice(0, 6).map(tok => (
-                          <div 
-                            key={tok.id} 
-                            className={`token-item ${tok.is_active ? 'active' : 'inactive'}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(`https://odin.fun/token/${tok.id}`, '_blank');
-                            }}
-                          >
-                            <div className="token-header-small">
-                              <div className="token-info">
-                                <div className="token-image-small">
-                                  <img 
-                                    src={getTokenImageUrl(tok.id)} 
-                                    alt={tok.name} 
-                                    onError={(e) => {
-                                      const target = e.target as HTMLImageElement;
-                                      target.onerror = null;
-                                      target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>';
-                                    }}
-                                  />
+                        {creator.tokens.slice(0, 6).map(tok => {
+                          // Use the is_active property directly
+                          const shouldShowInactiveTag = !tok.is_active;
+                          
+                          return (
+                            <div 
+                              key={tok.id} 
+                              className={`token-item ${tok.is_active ? 'active' : 'inactive'}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`https://odin.fun/token/${tok.id}`, '_blank');
+                              }}
+                            >
+                              <div className="token-header-small">
+                                <div className="token-info">
+                                  <div className="token-image-small">
+                                    <img 
+                                      src={getTokenImageUrl(tok.id)} 
+                                      alt={tok.name} 
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.onerror = null;
+                                        target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>';
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="token-name">
+                                    <span className="token-name-text">{tok.name}</span>
+                                    {shouldShowInactiveTag && <span className="inactive-tag">Inactive</span>}
+                                  </div>
                                 </div>
-                                <div className="token-name">{tok.name}</div>
+                                <div className="token-price-container">
+                                  <div className="token-price-small">{formatPrice(tok.price)}</div>
+                                </div>
                               </div>
-                              <div className="token-price-container">
-                                <div className="token-price-small">{formatPrice(tok.price)}</div>
+                              
+                              <div className="token-stats">
+                                <div className="token-stat">
+                                  <div className="stat-label">Volume</div>
+                                  <div className="stat-value">{formatTokenVolumeDisplay(tok.volume)}</div>
+                                </div>
+                                <div className="token-stat">
+                                  <div className="stat-label">Holders</div>
+                                  <div className="stat-value">{formatNumber(tok.holder_count)}</div>
+                                </div>
+                                <div className="token-stat">
+                                  <div className="stat-label">MCap</div>
+                                  <div className="stat-value">{formatTokenMarketcapDisplay(tok.marketcap)}</div>
+                                </div>
+                                <div className="token-stat">
+                                  <div className="stat-label">Txs</div>
+                                  <div className="stat-value">{formatNumber(tok.buy_count + tok.sell_count)}</div>
+                                </div>
                               </div>
                             </div>
-                            
-                            <div className="token-stats">
-                              <div className="token-stat">
-                                <div className="stat-label">Volume</div>
-                                <div className="stat-value">{formatTokenVolumeDisplay(tok.volume)}</div>
-                              </div>
-                              <div className="token-stat">
-                                <div className="stat-label">Holders</div>
-                                <div className="stat-value">{formatNumber(tok.holder_count)}</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

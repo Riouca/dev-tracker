@@ -15,7 +15,7 @@ function getRarityColor(score: number): string {
     case 'great': return 'text-blue-400';       // Blue
     case 'okay': return 'text-green-400';       // Green
     case 'neutral': return 'text-gray-100';     // White
-    case 'meh': return 'text-gray-400';         // Gray
+    case 'meh': return 'text-amber-600';        // Dark Orange
     case 'scam': return 'text-red-500';         // Red
     default: return 'text-red-500';             // Red
   }
@@ -183,77 +183,79 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
 
   return (
     <div className={`creator-card ${isExpanded ? 'expanded' : ''}`}>
-      <div className="creator-header" onClick={toggleExpand}>
-        <div className="creator-info">
-          <div className="creator-avatar">
-            {creator.image ? (
-              <img 
-                src={`https://images.odin.fun/user/${creator.principal}`} 
-                alt={creator.username} 
-              />
-            ) : (
-              <div className="creator-avatar-placeholder">
-                {creator.username[0].toUpperCase()}
-              </div>
-            )}
-          </div>
-          <div className="creator-details">
-            <div className="creator-title">
-              <h3 className={`creator-name ${rarityColor}`}>
-                {rankMedal}{creator.username}
-              </h3>
-              <span className={`rarity-badge ${rarityColor}`}>
-                {rarityLevel.charAt(0).toUpperCase() + rarityLevel.slice(1)}
-              </span>
+      <div className="creator-header-wrapper" title="Click to expand developer details">
+        <div className="creator-header" onClick={toggleExpand}>
+          <div className="creator-info">
+            <div className="creator-avatar">
+              {creator.image ? (
+                <img 
+                  src={`https://images.odin.fun/user/${creator.principal}`} 
+                  alt={creator.username} 
+                />
+              ) : (
+                <div className="creator-avatar-placeholder">
+                  {creator.username[0].toUpperCase()}
+                </div>
+              )}
             </div>
-            <div className="creator-metrics">
-              <div className="confidence-score">
-                <span className="metric-label">Confidence:</span> 
-                <span className={rarityColor}>{creator.confidenceScore.toFixed(1)}%</span>
+            <div className="creator-details">
+              <div className="creator-title">
+                <h3 className={`creator-name ${rarityColor}`}>
+                  {rankMedal}{creator.username}
+                </h3>
+                <span className={`rarity-badge ${rarityColor}`}>
+                  {rarityLevel.charAt(0).toUpperCase() + rarityLevel.slice(1)}
+                </span>
               </div>
-              <div className="creator-last-token">
-                <span className="metric-label">Last token:</span> 
-                <span className="token-date">{lastTokenDate}</span>
-              </div>
-              <div className="creator-trades">
-                <span className="metric-label">Total trades:</span> 
-                <span className="trade-count">{formatNumber(totalTrades)}</span>
-              </div>
-              <div className="creator-avg-price">
-                <span className="metric-label">Avg token price:</span> 
-                <span className="avg-price">{avgPrice.toFixed(3)} sats</span>
+              <div className="creator-metrics">
+                <div className="confidence-score">
+                  <span className="metric-label">Confidence:</span> 
+                  <span className={rarityColor}>{creator.confidenceScore.toFixed(1)}%</span>
+                </div>
+                <div className="creator-last-token">
+                  <span className="metric-label">Last token:</span> 
+                  <span className="token-date">{lastTokenDate}</span>
+                </div>
+                <div className="creator-trades">
+                  <span className="metric-label">Total trades:</span> 
+                  <span className="trade-count">{formatNumber(totalTrades)}</span>
+                </div>
+                <div className="creator-avg-price">
+                  <span className="metric-label">Avg token price:</span> 
+                  <span className="avg-price">{avgPrice.toFixed(3)} sats</span>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="creator-actions">
-            <button 
-              className={`follow-button ${isFollowed ? 'following' : ''}`}
-              onClick={toggleFollow}
-              aria-label={isFollowed ? 'Unfollow creator' : 'Follow creator'}
-            >
-              {isFollowed ? 'Following' : 'Follow'}
-            </button>
-          </div>
-        </div>
-        
-        <div className="creator-stats">
-          <div className="creator-stat">
-            <div className="stat-value">{creator.activeTokens}/{creator.totalTokens}</div>
-            <div className="stat-label">Active Tokens</div>
-          </div>
-          <div className="creator-stat" onClick={toggleVolumeDisplay}>
-            <div className="stat-value volume-value">
-              {formatVolumeDisplay()}
+            <div className="creator-actions">
+              <button 
+                className={`follow-button ${isFollowed ? 'following' : ''}`}
+                onClick={toggleFollow}
+                aria-label={isFollowed ? 'Unfollow creator' : 'Follow creator'}
+              >
+                {isFollowed ? 'Following' : 'Follow'}
+              </button>
             </div>
-            <div className="stat-label">Volume {showUSD ? '(USD)' : '(BTC)'}</div>
           </div>
-          <div className="creator-stat">
-            <div className="stat-value">{formattedSuccessRate}</div>
-            <div className="stat-label">Success Rate</div>
-          </div>
-          <div className="creator-stat">
-            <div className="stat-value">{formatNumber(creator.totalHolders || 0)}</div>
-            <div className="stat-label">Total Holders</div>
+          
+          <div className="creator-stats">
+            <div className="creator-stat">
+              <div className="stat-value">{creator.activeTokens}/{creator.totalTokens}</div>
+              <div className="stat-label">Active Tokens</div>
+            </div>
+            <div className="creator-stat" onClick={toggleVolumeDisplay}>
+              <div className="stat-value volume-value">
+                {formatVolumeDisplay()}
+              </div>
+              <div className="stat-label">Volume {showUSD ? '(USD)' : '(BTC)'}</div>
+            </div>
+            <div className="creator-stat">
+              <div className="stat-value">{formattedSuccessRate}</div>
+              <div className="stat-label">Success Rate</div>
+            </div>
+            <div className="creator-stat">
+              <div className="stat-value">{formatNumber(creator.totalHolders || 0)}</div>
+              <div className="stat-label">Total Holders</div>
+            </div>
           </div>
         </div>
       </div>
@@ -311,7 +313,7 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
                   </div>
                   {!token.is_active && (
                     <div className="inactive-reason">
-                      ⚠️ DEAD TOKEN ⚠️ - {token.inactive_reason}
+                      ⚠️ DEAD TOKEN ⚠️
                     </div>
                   )}
                   <div className="token-stats">

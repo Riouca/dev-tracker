@@ -51,4 +51,29 @@ export function getTimeSince(dateInput: string | Date): string {
   } else {
     return 'just now'
   }
+}
+
+/**
+ * Calculates and formats the percentage of tokens held by the developer
+ * @param developerHoldings The amount of tokens held by the developer
+ * @param totalSupply The total supply of the token
+ * @returns Formatted percentage string
+ */
+export function formatDeveloperHoldings(developerHoldings: number, totalSupply: number): string {
+  if (!developerHoldings || !totalSupply || totalSupply === 0) {
+    return '0%';
+  }
+  
+  const percentage = (developerHoldings / totalSupply) * 100;
+  
+  // Format based on the size of the percentage
+  if (percentage < 0.01) {
+    return '<0.01%';
+  } else if (percentage < 1) {
+    return percentage.toFixed(2) + '%';
+  } else if (percentage < 10) {
+    return percentage.toFixed(1) + '%';
+  } else {
+    return Math.round(percentage) + '%';
+  }
 } 
