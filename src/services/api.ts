@@ -474,11 +474,11 @@ export const calculateCreatorPerformance = async (
     // Nouvelle logique : calculer les scores individuels selon les nouvelles spécifications
     
     // Constantes pour les poids du score final
-    const successWeight = 0.33;  // 35% weight for success rate
-    const volumeWeight = 0.33;   // 35% weight for volume
+    const successWeight = 0.33;  // 33% weight for success rate
+    const volumeWeight = 0.33;   // 33% weight for volume
     const holdersWeight = 0.15;  // 15% weight for holders
-    const tradesWeight = 0.04;   // 1% weight for trades
-    const mcapWeight = 0.15;     // 15% weight for generated marketcap
+    const tradesWeight = 0.01;   // 1% weight for trades
+    const mcapWeight = 0.18;     // 18% weight for generated marketcap
     
     // 1. Volume score: linear scale based on BTC volume in USD
     // For volume: $0 = 0 points, $600,000 = 100 points (linear scale)

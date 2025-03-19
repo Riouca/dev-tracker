@@ -472,9 +472,11 @@ body {
 .creator-name {
   font-size: 1.1rem;
   font-weight: 600;
-  white-space: normal;
-  overflow: visible;
-  line-height: 1.2;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 85%;
 }
 
 /* Rarity colors */
@@ -830,12 +832,20 @@ body {
 }
 
 .token-name {
-  font-weight: 600;
-  font-size: 0.9rem;
-  white-space: nowrap;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  white-space: nowrap;
+  max-width: 90%;
+}
+
+.token-name-text {
+  display: inline-block;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 .token-price-container {
@@ -988,11 +998,53 @@ body {
 
 /* Footer */
 .app-footer {
-  padding: var(--space-6);
+  padding: var(--space-6) var(--space-4);
   border-top: 1px solid var(--color-border);
+  margin-top: auto;
+}
+
+.footer-content {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
   text-align: center;
+}
+
+.footer-links {
+  display: flex;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.footer-link {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
+  text-decoration: none;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  transition: color 0.2s ease;
+}
+
+.footer-link:hover {
+  color: var(--color-text);
+}
+
+.footer-link.social-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.footer-info {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.copyright {
+  margin: 0;
 }
 
 /* Loading States */
@@ -1507,16 +1559,20 @@ body {
 }
 
 .token-name {
-  font-weight: 600;
-  font-size: 0.9rem;
-  white-space: nowrap;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 120px;
+  white-space: nowrap;
+  max-width: 90%;
 }
 
-.token-name.large {
-  font-size: 1.2rem;
+.token-name-text {
+  display: inline-block;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 .token-price-container {
@@ -2445,9 +2501,9 @@ body {
 }
 
 .follow-button {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--border-radius-sm);
   padding: 0.5rem 1.25rem;
   font-size: 0.875rem;
@@ -2455,22 +2511,25 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   margin: 0 0.5rem;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
 }
 
 .follow-button:hover {
-  background-color: rgba(255, 255, 255, 0.15);
-  border-color: var(--color-accent);
+  background-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .follow-button.following {
-  background-color: var(--color-accent);
-  color: var(--color-text-on-accent);
-  border-color: var(--color-accent);
+  background-color: rgba(30, 30, 30, 0.8);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+  box-shadow: none;
 }
 
 .follow-button.following:hover {
-  background-color: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
+  background-color: rgba(40, 40, 40, 0.95);
+  color: var(--color-text);
+  border-color: var(--color-border);
 }
 
 .last-updated-footer {
@@ -2673,27 +2732,30 @@ body {
   font-size: 0.8rem;
   border-radius: 0.375rem;
   font-weight: 500;
-  background-color: transparent;
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
 }
 
 .recent-tokens-container .follow-button:hover {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-accent);
+  background-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .recent-tokens-container .follow-button.following {
-  background-color: var(--color-accent);
-  color: var(--color-text-on-accent);
-  border-color: var(--color-accent);
+  background-color: rgba(30, 30, 30, 0.8);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+  box-shadow: none;
 }
 
 .recent-tokens-container .follow-button.following:hover {
-  background-color: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
+  background-color: rgba(40, 40, 40, 0.95);
+  color: var(--color-text);
+  border-color: var(--color-border);
 }
 
 /* Optimisation pour les petits écrans */
@@ -3102,4 +3164,519 @@ body {
   padding: 2px 6px;
   background-color: rgba(74, 222, 128, 0.1);
   border-radius: 4px;
+}
+
+/* How it works modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(3px);
+  padding: 1rem;
+}
+
+.info-modal {
+  background-color: var(--color-background-secondary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--color-border);
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(90deg, #ffffff 0%, #e2e2e2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  line-height: 1;
+  border-radius: 50%;
+  margin: -0.5rem;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  color: var(--color-text);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.modal-content {
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.score-explanation, .tier-explanation {
+  margin-bottom: 2rem;
+}
+
+.score-explanation h3, .tier-explanation h3 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.score-explanation p, .tier-explanation p {
+  margin-bottom: 1rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.metrics-list, .tiers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.metric-item, .tier {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: var(--border-radius);
+  padding: 1rem;
+  border-left: 4px solid var(--color-border);
+}
+
+.metric-header, .tier-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.metric-name, .tier-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.metric-weight, .tier-range {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.metric-item p, .tier p {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* Tier Colors */
+.tier.legendary {
+  border-left-color: #ffd700; /* Gold */
+}
+
+.tier.epic {
+  border-left-color: #a855f7; /* Purple */
+}
+
+.tier.great {
+  border-left-color: #3b82f6; /* Blue */
+}
+
+.tier.okay {
+  border-left-color: #22c55e; /* Green */
+}
+
+.tier.neutral {
+  border-left-color: #e5e5e5; /* White */
+}
+
+.tier.meh {
+  border-left-color: #d97706; /* Dark Orange */
+}
+
+.tier.scam {
+  border-left-color: #ef4444; /* Red */
+}
+
+.tier-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tier.legendary .tier-name::before {
+  content: "🏆";
+}
+
+.tier.epic .tier-name::before {
+  content: "⭐";
+}
+
+.info-footer {
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+}
+
+.nav-link.info-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  background-color: transparent;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.nav-link.info-link:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.nav-link.info-link::before {
+  content: "?";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.3rem;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  font-weight: bold;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2);
+  transition: background-color 0.2s ease;
+}
+
+.nav-link.info-link:hover::before {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Responsive styles for the modal */
+@media (max-width: 768px) {
+  .info-modal {
+    max-width: 95%;
+    max-height: 80vh;
+  }
+  
+  .metrics-list, .tiers-list {
+    gap: 0.75rem;
+  }
+  
+  .metric-item, .tier {
+    padding: 0.75rem;
+  }
+  
+  .modal-header {
+    padding: 1rem;
+  }
+  
+  .modal-content {
+    padding: 1rem;
+  }
+}
+
+/* Tier label styling */
+.tier-label {
+  display: none; /* Hide tier labels */
+  font-size: 0.7rem;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Confidence score colors */
+.legendary {
+  color: #ffd700 !important; /* Gold */
+}
+
+.epic {
+  color: #a855f7 !important; /* Purple */
+}
+
+.great {
+  color: #3b82f6 !important; /* Blue */
+}
+
+.okay {
+  color: #22c55e !important; /* Green */
+}
+
+.neutral {
+  color: #e5e5e5 !important; /* White */
+}
+
+.meh {
+  color: #d97706 !important; /* Dark Orange */
+}
+
+.scam {
+  color: #ef4444 !important; /* Red */
+}
+
+/* Star button for favorites */
+.creator-title .star-button {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0.3rem;
+  font-size: 1.2rem;
+  line-height: 1;
+  transition: color 0.2s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.5rem;
+}
+
+.creator-title .star-button:hover {
+  color: #ffd700;
+  transform: scale(1.2);
+}
+
+.creator-title .star-button.favorite {
+  color: #ffd700;
+}
+
+/* Favorites filter */
+.favorites-filter {
+  display: flex;
+  align-items: center;
+  margin-left: 1rem;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.favorites-filter label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.favorites-filter input[type="checkbox"] {
+  margin-right: 0.5rem;
+  accent-color: #ffd700;
+  cursor: pointer;
+}
+
+/* Animation for removing favorites */
+@keyframes fadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.8); }
+}
+
+.removing-favorite {
+  animation: fadeOut 0.3s ease-out forwards;
+}
+
+/* Animation for removing creator cards */
+@keyframes removeCard {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    max-height: 800px;
+    margin-bottom: 1rem;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+    max-height: 0;
+    margin-bottom: 0;
+  }
+}
+
+.creator-card.removing {
+  animation: removeCard 300ms ease-out forwards;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Follow button star animation */
+@keyframes star-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.1) rotate(0deg);
+  }
+  30% {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(0.8) rotate(30deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.5) rotate(60deg);
+  }
+}
+
+.star-particle {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='%23c9a936'%3E%3Cpath d='M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  pointer-events: none;
+  z-index: 9999;
+  transform-origin: center;
+  animation: star-burst 450ms ease-out forwards;
+}
+
+/* Additional styles for follow button to support the star effect */
+.follow-button {
+  position: relative;
+  overflow: visible;
+}
+
+/* Create a container for the star animation */
+.star-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Token color square */
+.token-color-square {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-color: currentColor;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-top: -2px;
+}
+
+.token-name .token-color-square {
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+}
+
+/* External Link Icon */
+.external-link-wrapper {
+  display: inline-flex;
+  margin-left: 4px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.external-link-icon {
+  display: inline-block;
+  opacity: 0.5;
+  vertical-align: -1px;
+  transition: opacity 0.2s ease;
+}
+
+.external-link-icon.small {
+  margin-left: 0;
+  vertical-align: -1px;
+}
+
+.creator-name:hover .external-link-icon,
+.token-name:hover .external-link-icon,
+.token-name-text:hover .external-link-icon {
+  opacity: 1;
+}
+
+/* Fix pour les noms longs */
+.creator-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  max-width: 85%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-name {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-name-text {
+  display: inline-flex;
+  align-items: center;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Styles spécifiques pour les tokens du développeur dans Recent Tokens */
+.recent-tokens-container .token-item .token-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: visible;
+}
+
+.recent-tokens-container .token-item .token-name-wrapper {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  max-width: 85%;
+}
+
+.recent-tokens-container .token-item .token-name-text {
+  max-width: 85%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-tokens-container .token-item .external-link-wrapper {
+  margin-left: 4px;
+  margin-right: 4px;
+  flex-shrink: 0;
 }

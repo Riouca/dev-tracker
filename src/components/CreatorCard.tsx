@@ -8,17 +8,14 @@ interface CreatorCardProps {
 }
 
 function getRarityColor(score: number): string {
-  const level = getRarityLevel(score);
-  switch (level) {
-    case 'legendary': return 'text-yellow-400'; // Gold
-    case 'epic': return 'text-purple-400';      // Purple
-    case 'great': return 'text-blue-400';       // Blue
-    case 'okay': return 'text-green-400';       // Green
-    case 'neutral': return 'text-gray-100';     // White
-    case 'meh': return 'text-amber-600';        // Dark Orange
-    case 'scam': return 'text-red-500';         // Red
-    default: return 'text-red-500';             // Red
-  }
+  if (score >= 100) return 'legendary';   // Gold - only perfect 100%
+  if (score >= 90) return 'epic';         // Purple
+  if (score >= 80) return 'great';        // Blue
+  if (score >= 70) return 'okay';         // Green
+  if (score >= 60) return 'neutral';      // White
+  if (score >= 45) return 'meh';          // Dark Orange (amber-600)
+  if (score >= 30) return 'scam';         // Brown
+  return 'scam';                          // Red
 }
 
 function getRankMedal(rank: number | undefined): string {
@@ -27,6 +24,16 @@ function getRankMedal(rank: number | undefined): string {
   if (rank === 2) return '🥈 ';
   if (rank === 3) return '🥉 ';
   return '';
+}
+
+function getTierName(score: number): string {
+  if (score >= 100) return 'Legendary';
+  if (score >= 90) return 'Epic';
+  if (score >= 80) return 'Great';
+  if (score >= 70) return 'Okay';
+  if (score >= 60) return 'Neutral';
+  if (score >= 45) return 'Meh';
+  return 'Scam';
 }
 
 function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
@@ -60,14 +67,32 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
     e.stopPropagation();
     const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]');
     
-    if (isFollowed) {
-      // Remove from followed
-      const updatedFollowed = followedCreators.filter((p: string) => p !== creator.principal);
-      localStorage.setItem('followedCreators', JSON.stringify(updatedFollowed));
-    } else {
+    if (!isFollowed) {
+      // Create star burst effect when following
+      createStarBurst(e);
+      
       // Add to followed
       followedCreators.push(creator.principal);
       localStorage.setItem('followedCreators', JSON.stringify(followedCreators));
+    } else {
+      // Remove from followed
+      const updatedFollowed = followedCreators.filter((p: string) => p !== creator.principal);
+      localStorage.setItem('followedCreators', JSON.stringify(updatedFollowed));
+      
+      // If we're in the Dashboard on the 'followed' tab, remove this card immediately from display
+      const dashboardElement = document.querySelector('.dashboard');
+      const followedTabActive = document.querySelector('.dashboard-tab.active')?.textContent?.includes('Followed');
+      
+      if (dashboardElement && followedTabActive) {
+        // Find this card and remove it with animation
+        const card = (e.currentTarget as HTMLElement)?.closest('.creator-card');
+        if (card) {
+          card.classList.add('removing');
+          setTimeout(() => {
+            (card as HTMLElement).style.display = 'none';
+          }, 300); // Match this with CSS animation duration
+        }
+      }
     }
     
     setIsFollowed(!isFollowed);
@@ -77,6 +102,48 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
     // Call onUpdate if provided
     if (onUpdate) {
       onUpdate();
+    }
+  };
+  
+  // Function to create the star burst effect
+  const createStarBurst = (e: React.MouseEvent) => {
+    const button = e.currentTarget as HTMLElement;
+    
+    // Create 3-5 stars
+    const starCount = Math.floor(Math.random() * 3) + 3;
+    
+    for (let i = 0; i < starCount; i++) {
+      // Create a star
+      const star = document.createElement('div');
+      star.className = 'star-particle';
+      document.body.appendChild(star);
+      
+      // Position the star relative to the button
+      const rect = button.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      
+      // Random angle and distance from center (distance plus grande)
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 10 + Math.random() * 30;
+      
+      // Calculate final position
+      const x = centerX + Math.cos(angle) * distance;
+      const y = centerY + Math.sin(angle) * distance;
+      
+      // Apply position with fixed positioning relative to viewport
+      star.style.position = 'fixed';
+      star.style.left = `${x}px`;
+      star.style.top = `${y}px`;
+      star.style.zIndex = '9999';
+      star.style.animationDelay = `${Math.random() * 50}ms`;
+      
+      // Remove star after animation completes
+      setTimeout(() => {
+        if (document.body.contains(star)) {
+          document.body.removeChild(star);
+        }
+      }, 500); // Un peu plus long que l'animation pour assurer que toutes les étoiles sont terminées
     }
   };
 
@@ -416,7 +483,16 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
                           }}
                         />
                       </div>
-                      <div className="token-name">{token.name}</div>
+                      <div className="token-name">
+                        {token.name}
+                        <span className="external-link-wrapper">
+                          <svg className="external-link-icon" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                          </svg>
+                        </span>
+                      </div>
                     </div>
                     <div className="token-price-container">
                       <div className="token-price-large">{formatPrice(token.price)}</div>

@@ -36,6 +36,7 @@ export function RecentTokens() {
   const [expandedCreators, setExpandedCreators] = useState<Set<string>>(new Set())
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all')
   const [showConfidenceDetails, setShowConfidenceDetails] = useState<string | null>(null)
+  const [favoriteTokens, setFavoriteTokens] = useState<Set<string>>(new Set())
 
   const fetchRecentTokens = async () => {
     try {
@@ -82,35 +83,41 @@ export function RecentTokens() {
     }
   }
 
-  // Apply confidence filter
+  // Load favorite tokens from localStorage
   useEffect(() => {
-    if (tokens.length === 0) return
+    const savedFavorites = localStorage.getItem('favoriteTokens');
+    if (savedFavorites) {
+      setFavoriteTokens(new Set(JSON.parse(savedFavorites)));
+    }
+  }, []);
+
+  // Filter tokens based on confidence only (remove favorites filter)
+  useEffect(() => {
+    let filtered = [...tokens];
     
-    if (confidenceFilter === 'all') {
-      setFilteredTokens(tokens)
-      return
+    // Apply confidence filter
+    if (confidenceFilter !== 'all' && filtered.length > 0) {
+      filtered = filtered.filter(({ creator }) => {
+        if (!creator) return false;
+        
+        const score = creator.confidenceScore;
+        switch (confidenceFilter) {
+          case 'legendary':
+            return score >= 90;
+          case 'high':
+            return score >= 70 && score < 90;
+          case 'medium':
+            return score >= 50 && score < 70;
+          case 'low':
+            return score < 50;
+          default:
+            return true;
+        }
+      });
     }
     
-    // Filter tokens based on confidence score
-    const filtered = tokens.filter(({ creator }) => {
-      if (!creator) return false
-      
-      switch (confidenceFilter) {
-        case 'legendary':
-          return creator.confidenceScore >= 90
-        case 'high':
-          return creator.confidenceScore >= 70 && creator.confidenceScore < 90
-        case 'medium':
-          return creator.confidenceScore >= 50 && creator.confidenceScore < 70
-        case 'low':
-          return creator.confidenceScore < 50
-        default:
-          return true
-      }
-    })
-    
-    setFilteredTokens(filtered)
-  }, [tokens, confidenceFilter])
+    setFilteredTokens(filtered);
+  }, [tokens, confidenceFilter]);
 
   // Format token volume display
   const formatTokenVolumeDisplay = (volume: number) => {
@@ -169,19 +176,27 @@ export function RecentTokens() {
     return `${diffDays} days ago`;
   };
 
-  // Get rarity color for confidence score
+  // Get confidence score color class based on score
   const getRarityColor = (score: number): string => {
-    const level = getRarityLevel(score);
-    switch (level) {
-      case 'legendary': return 'text-yellow-400'; // Gold
-      case 'epic': return 'text-purple-400';      // Purple
-      case 'great': return 'text-blue-400';       // Blue
-      case 'okay': return 'text-green-400';       // Green
-      case 'neutral': return 'text-gray-100';     // White
-      case 'meh': return 'text-amber-600';        // Dark Orange
-      case 'scam': return 'text-red-500';         // Red
-      default: return 'text-red-500';             // Red
-    }
+    if (score >= 100) return 'legendary';   // Gold - only perfect 100%
+    if (score >= 90) return 'epic';         // Purple
+    if (score >= 80) return 'great';        // Blue
+    if (score >= 70) return 'okay';         // Green
+    if (score >= 60) return 'neutral';      // White
+    if (score >= 45) return 'meh';          // Dark Orange (amber-600)
+    if (score >= 30) return 'scam';         // Brown
+    return 'scam';                          // Red
+  };
+  
+  // Get tier name based on confidence score
+  const getTierName = (score: number): string => {
+    if (score >= 100) return 'Legendary';
+    if (score >= 90) return 'Epic';
+    if (score >= 80) return 'Great';
+    if (score >= 70) return 'Okay';
+    if (score >= 60) return 'Neutral';
+    if (score >= 45) return 'Meh';
+    return 'Scam';
   };
 
   // Toggle expanded creator
@@ -557,7 +572,16 @@ export function RecentTokens() {
                     </div>
                     <div className="creator-details">
                       <div className="creator-title">
-                        <h3 className={`creator-name ${creator ? getRarityColor(creator.confidenceScore) : ''}`}>{token.name}</h3>
+                        <h3 className={`creator-name ${creator ? getRarityColor(creator.confidenceScore) : ''}`}>
+                          {token.name}
+                          <span className="external-link-wrapper">
+                            <svg className="external-link-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                              <polyline points="15 3 21 3 21 9"></polyline>
+                              <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                          </span>
+                        </h3>
                         <span className="token-ticker">${token.ticker || token.name.substring(0, 4).toUpperCase()}</span>
                       </div>
                       <div className="creator-metrics">
@@ -673,7 +697,18 @@ export function RecentTokens() {
                                     />
                                   </div>
                                   <div className="token-name">
-                                    <span className="token-name-text">{tok.name}</span>
+                                    <div className="token-name-wrapper">
+                                      <span className="token-name-text">
+                                        {tok.name}
+                                      </span>
+                                      <span className="external-link-wrapper">
+                                        <svg className="external-link-icon small" xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                          <polyline points="15 3 21 3 21 9"></polyline>
+                                          <line x1="10" y1="14" x2="21" y2="3"></line>
+                                        </svg>
+                                      </span>
+                                    </div>
                                     {shouldShowInactiveTag && <span className="inactive-tag">Inactive</span>}
                                   </div>
                                 </div>
