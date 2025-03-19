@@ -1,8 +1,8 @@
 // Browser-compatible Redis-like cache service
 // This is a sessionStorage implementation that mimics the Redis interface
 
-// Cache expiry time - 30 minutes in milliseconds
-const CACHE_EXPIRY_TIME = 30 * 60 * 1000;
+// Cache expiry time - 20 minutes in milliseconds
+const CACHE_EXPIRY_TIME = 20 * 60 * 1000;
 
 interface CacheItem<T> {
   data: T;

@@ -35,6 +35,7 @@ export function RecentTokens() {
   const [displayTime, setDisplayTime] = useState<string>('')
   const [expandedCreators, setExpandedCreators] = useState<Set<string>>(new Set())
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all')
+  const [showConfidenceDetails, setShowConfidenceDetails] = useState<string | null>(null)
 
   const fetchRecentTokens = async () => {
     try {
@@ -195,6 +196,104 @@ export function RecentTokens() {
       }
       return newSet;
     });
+  };
+
+  // Toggle confidence details popup
+  const toggleConfidenceDetails = (e: React.MouseEvent, principal: string) => {
+    e.stopPropagation();
+    setShowConfidenceDetails(prev => prev === principal ? null : principal);
+  };
+
+  // Calculate individual confidence score components
+  const getConfidenceScoreDetails = (creator: CreatorPerformance) => {
+    // Get component scores based on the weights
+    const successWeight = 0.35;  // 35% weight for success rate
+    const volumeWeight = 0.25;   // 25% weight for volume
+    const holdersWeight = 0.25;  // 25% weight for holders
+    const tradesWeight = 0.05;   // 5% weight for trades
+    const mcapWeight = 0.10;     // 10% weight for generated marketcap
+
+    // Get raw scores from the final score (estimating)
+    // We don't have access to the raw scores directly, so we'll use the final score to derive them
+    const totalScore = creator.confidenceScore;
+    
+    // Calculate raw scores from the creator data as much as possible
+    
+    // Success score - estimate based on active vs total tokens with penalty
+    let successScore = 0;
+    if (creator.totalTokens > 0) {
+      // Base success rate
+      const successRate = (creator.activeTokens / creator.totalTokens) * 100;
+      
+      // Pénalité pour tokens inactifs
+      const inactiveTokens = creator.totalTokens - creator.activeTokens;
+      const penaltyMultiplier = Math.pow(inactiveTokens / creator.totalTokens, 0.5);
+      
+      successScore = Math.max(0, successRate - (penaltyMultiplier * 20));
+      
+      // Cas spécial: 0 tokens actifs
+      if (creator.activeTokens === 0) {
+        successScore = Math.max(0, 100 - (creator.totalTokens * 5));
+      }
+    }
+    
+    // Volume score (estimated using linear scale)
+    const defaultBtcPrice = 82000; // Default BTC price in USD
+    const volumeInUSD = (creator.btcVolume || 0) * defaultBtcPrice;
+    const maxVolumeUSD = 600000; // $600K for max score
+    const volumeScore = Math.min(100, (volumeInUSD / maxVolumeUSD) * 100);
+    
+    // Holders score (estimated using linear scale)
+    const totalHolders = creator.totalHolders || 0;
+    const maxHolders = 600; // 600 holders for max score
+    const holdersScore = Math.min(100, (totalHolders / maxHolders) * 100);
+    
+    // Trades score (estimated using linear scale)
+    const totalTrades = creator.totalTrades || 0;
+    const maxTrades = 6000; // 6000 transactions for max score
+    const tradesScore = Math.min(100, (totalTrades / maxTrades) * 100);
+    
+    // Marketcap score (estimated using linear scale)
+    let mcapScore = 0;
+    if (creator.generatedMarketcapUSD !== undefined) {
+      const maxMarketcapUSD = 100000; // $100K for max score
+      mcapScore = Math.min(100, (creator.generatedMarketcapUSD / maxMarketcapUSD) * 100);
+    } else {
+      // Fallback calculation remains the same
+      const knownComponents = 
+        (successScore * successWeight) +
+        (volumeScore * volumeWeight) +
+        (holdersScore * holdersWeight) +
+        (tradesScore * tradesWeight);
+      
+      const mcapComponent = totalScore - knownComponents;
+      mcapScore = mcapComponent / mcapWeight * 100;
+    }
+    
+    // Calculate actual components
+    const successComponent = successScore * successWeight;
+    const volumeComponent = volumeScore * volumeWeight;
+    const holdersComponent = holdersScore * holdersWeight;
+    const tradesComponent = tradesScore * tradesWeight;
+    const mcapComponent = mcapScore * mcapWeight;
+    
+    return {
+      successComponent: successComponent.toFixed(1),
+      volumeComponent: volumeComponent.toFixed(1),
+      holdersComponent: holdersComponent.toFixed(1),
+      tradesComponent: tradesComponent.toFixed(1),
+      mcapComponent: mcapComponent.toFixed(1),
+      totalScore: totalScore.toFixed(1),
+      // Raw scores before weighting
+      successScore: successScore.toFixed(1),
+      volumeScore: volumeScore.toFixed(1),
+      holdersScore: holdersScore.toFixed(1),
+      tradesScore: tradesScore.toFixed(1),
+      mcapScore: mcapScore.toFixed(1),
+      // Additional contextual info
+      volumeInUSD: volumeInUSD.toFixed(0),
+      generatedMarketcapUSD: (creator.generatedMarketcapUSD || 0).toFixed(0)
+    };
   };
 
   // Fetch BTC price for USD conversion
@@ -533,7 +632,9 @@ export function RecentTokens() {
                         <div className="creator-metrics">
                           <div className="confidence-score">
                             <span className="metric-label">Confidence:</span> 
-                            <span className={getRarityColor(creator.confidenceScore)}>{creator.confidenceScore.toFixed(1)}%</span>
+                            <span className={getRarityColor(creator.confidenceScore)}>
+                              {creator.confidenceScore.toFixed(1)}%
+                            </span>
                           </div>
                           <div className="creator-tokens-count">
                             <span className="metric-label">Tokens:</span> 
@@ -639,4 +740,4 @@ export function RecentTokens() {
       </div>
     </div>
   )
-} 
+}

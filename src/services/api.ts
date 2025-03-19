@@ -118,6 +118,9 @@ export interface CreatorPerformance {
   totalTrades?: number;
   tokens: Token[];
   lastTokenCreated?: string;
+  totalMarketcap: number;
+  generatedMarketcapBTC: number;
+  generatedMarketcapUSD: number;
 }
 
 // Define TraderPerformance interface
@@ -441,8 +444,12 @@ export const calculateCreatorPerformance = async (
     let activeTokens = 0;
     let totalHolders = 0;
     let totalTrades = 0;
-    let totalPrice = 0;
-    let activeTokensWithPrice = 0;
+    let totalMarketcap = 0;
+    
+    // Base marketcap par token (0.025 BTC)
+    const baseBtcMarketcapPerToken = 0.025;
+    const defaultBtcPrice = 82000; // Valeur par défaut du BTC en USD
+    const btcPrice = await getBTCPrice() || defaultBtcPrice;
     
     tokens.forEach(token => {
       if (token.volume > 0) {
@@ -451,76 +458,127 @@ export const calculateCreatorPerformance = async (
       
       if (token.is_active) {
         activeTokens++;
-        // Ajouter le prix au total seulement pour les tokens actifs
-        const priceInSats = token.price_in_sats || token.price / 1000;
-        if (priceInSats > 0) {
-          totalPrice += priceInSats;
-          activeTokensWithPrice++;
-        }
       }
       
       totalHolders += token.holder_count || 0;
       totalTrades += (token.buy_count || 0) + (token.sell_count || 0);
+      
+      // Ajouter la marketcap du token (convertie en BTC)
+      const tokenMarketcapInBtc = token.marketcap / 100000000 / 1000;
+      totalMarketcap += tokenMarketcapInBtc;
     });
-    
-    // Calculer le prix moyen des tokens actifs
-    const avgTokenPrice = activeTokensWithPrice > 0 ? totalPrice / activeTokensWithPrice : 0;
-    console.log(`Average price for active tokens of ${user.username}: ${avgTokenPrice.toFixed(3)} sats`);
     
     // Calculate success rate based on active tokens
     const successRate = tokens.length > 0 ? (activeTokens / tokens.length) * 100 : 0;
     
-    // Calculate weighted score (combines volume and active tokens)
-    const volumeWeight = 0.6;
-    const activeTokenWeight = 0.4;
+    // Nouvelle logique : calculer les scores individuels selon les nouvelles spécifications
     
-    // Normalize volume
-    const maxVolume = Math.max(...tokens.map(t => t.volume || 1));
-    const normalizedVolume = totalVolume / (maxVolume || 1);
+    // Constantes pour les poids du score final
+    const successWeight = 0.33;  // 35% weight for success rate
+    const volumeWeight = 0.33;   // 35% weight for volume
+    const holdersWeight = 0.15;  // 15% weight for holders
+    const tradesWeight = 0.04;   // 1% weight for trades
+    const mcapWeight = 0.15;     // 15% weight for generated marketcap
     
-    // Normalize active tokens ratio
-    const normalizedActiveTokens = tokens.length > 0 ? activeTokens / tokens.length : 0;
+    // 1. Volume score: linear scale based on BTC volume in USD
+    // For volume: $0 = 0 points, $600,000 = 100 points (linear scale)
+    const maxVolumeUSD = 600000; // $600K for maximum score
+    const volumeInUSD = totalVolume / 100000000 * btcPrice;
+    const volumeScore = Math.min(100, (volumeInUSD / maxVolumeUSD) * 100);
     
-    // Calculate weighted score
-    const weightedScore = (normalizedVolume * volumeWeight) + (normalizedActiveTokens * activeTokenWeight);
+    // 2. Holders score: linear scale based on total holder count
+    // For holders: 0 = 0 points, 600 = 100 points (linear scale)
+    const maxHolders = 600; // 600 holders for maximum score
+    const holdersScore = Math.min(100, (totalHolders / maxHolders) * 100);
     
-    // Calculate confidence score with various factors
-    const successWeight = 0.30;  // 30% weight for success rate
-    const volumeWeight2 = 0.25;  // 25% weight for volume
-    const holdersWeight = 0.20;  // 20% weight for holders
-    const tradesWeight = 0.05;   // 5% weight for trades
-    const priceWeight = 0.20;    // 20% weight for avg token price
+    // 3. Trades score: linear scale based on total transaction count
+    // For trades: 0 = 0 points, 6000 = 100 points (linear scale)
+    const maxTrades = 6000; // 6000 transactions for maximum score
+    const tradesScore = Math.min(100, (totalTrades / maxTrades) * 100);
     
-    // Calculate individual scores
-    const successScore = Math.min(100, successRate);
+    // 4. Marketcap généré score: différence entre la marketcap totale et la base (0.025 BTC par token)
+    const baseMarketcap = tokens.length * baseBtcMarketcapPerToken;
+    const generatedMarketcap = Math.max(0, totalMarketcap - baseMarketcap);
     
-    // Volume score - logarithmic scale to handle wide range of volumes
-    // 1B sats (10 BTC) would be a perfect score
-    const volumeScore = Math.min(100, Math.log10(totalVolume + 1) * 10);
+    // Conversion en USD pour le log
+    const generatedMarketcapUSD = generatedMarketcap * btcPrice;
     
-    // Holders score - logarithmic scale
-    // 1000 holders would be a perfect score
-    const holdersScore = Math.min(100, Math.log10(totalHolders + 1) * 33.3);
+    // 5. Marketcap score: linear scale based on generated marketcap over threshold
+    // For marketcap: $0 = 0 points, $100,000 = 100 points (linear scale)
+    const maxMarketcapUSD = 100000; // $100K for maximum score
+    const mcapScore = Math.min(100, (generatedMarketcapUSD / maxMarketcapUSD) * 100);
     
-    // Trades score - logarithmic scale
-    // 1000 trades would be a perfect score
-    const tradesScore = Math.min(100, Math.log10(totalTrades + 1) * 33.3);
+    // 6. Success rate avec pénalité pour tokens inactifs
+    let successScore = 0;
+    if (tokens.length > 0) {
+      // Base success rate (active/total percentage)
+      const baseSuccessRate = (activeTokens / tokens.length) * 100;
+      
+      // Bonus/Penalty system:
+      // Each active token gives +6 bonus points (increased to favor more active tokens)
+      // Each inactive token gives a penalty that starts at -2 and increases by -0.5 for each additional token
+      // For example: 2 inactive tokens = -2 + (-2-0.5) = -4.5 penalty
+      const activeBonus = activeTokens * 6;
+      
+      let inactivePenalty = 0;
+      const inactiveTokens = tokens.length - activeTokens;
+      for (let i = 0; i < inactiveTokens; i++) {
+        inactivePenalty += 2 + (i * 0.5);
+      }
+      
+      // Calculate net bonus/penalty effect
+      const netEffect = activeBonus - inactivePenalty;
+      
+      // Apply to base success rate, but never below 0
+      successScore = Math.max(0, baseSuccessRate + netEffect);
+      
+      // Cap at 100 maximum
+      successScore = Math.min(100, successScore);
+      
+      // If no active tokens, use a more generous score based on token count
+      if (activeTokens === 0) {
+        // Start at 3 points for 0/1 and decrease by 0.5 per token
+        successScore = Math.max(0.5, 3 - (tokens.length * 0.5));
+      }
+      
+      // Log detailed success score calculation for debugging
+      console.log(`Success score calculation for ${user.username}:`, {
+        tokens: tokens.length,
+        activeTokens,
+        inactiveTokens,
+        baseSuccessRate,
+        activeBonus,
+        inactivePenalty,
+        netEffect,
+        finalSuccessScore: successScore
+      });
+    }
     
-    // Price score - based on average token price
-    // Logarithmic scale: 1 sats = ~33%, 10 sats = ~67%, 100 sats = 100%
-    const priceScore = avgTokenPrice > 0 ? Math.min(100, Math.log10(avgTokenPrice * 100 + 1) * 33.3) : 0;
-    
-    // Calculate final confidence score without random factor
-    let confidenceScore = (
+    // Calculate weighted confidence score based on various metrics
+    const confidenceScore = Math.min(100, Math.max(0,
       (successScore * successWeight) +
-      (volumeScore * volumeWeight2) +
+      (volumeScore * volumeWeight) +
       (holdersScore * holdersWeight) +
       (tradesScore * tradesWeight) +
-      (priceScore * priceWeight)
-    );
+      (mcapScore * mcapWeight)
+    ));
     
-    // Cap confidence score at 100
-    confidenceScore = Math.min(100, confidenceScore);
+    // Add detailed logging for score calculation
+    console.log(`DETAILED CONFIDENCE CALCULATION for ${user.username}:`, {
+      successComponent: (successScore * successWeight).toFixed(2),
+      volumeComponent: (volumeScore * volumeWeight).toFixed(2),
+      holdersComponent: (holdersScore * holdersWeight).toFixed(2),
+      tradesComponent: (tradesScore * tradesWeight).toFixed(2),
+      mcapComponent: (mcapScore * mcapWeight).toFixed(2),
+      rawComponents: {
+        successScore: successScore.toFixed(2),
+        volumeScore: volumeScore.toFixed(2),
+        holdersScore: holdersScore.toFixed(2),
+        tradesScore: tradesScore.toFixed(2),
+        mcapScore: mcapScore.toFixed(2),
+      },
+      totalScore: confidenceScore.toFixed(2)
+    });
     
     // Find the most recently created token
     const sortedByCreationTime = [...tokens].sort((a, b) => 
@@ -531,17 +589,6 @@ export const calculateCreatorPerformance = async (
     // Calculate BTC volume for display (divide by 1000 to get correct value)
     const btcVolume = convertVolumeToBTC(totalVolume) / 1000;
     
-    // Log the confidence score components for debugging
-    console.log(`Confidence score for ${user.username}:`, {
-      successScore: successScore.toFixed(2),
-      volumeScore: volumeScore.toFixed(2),
-      holdersScore: holdersScore.toFixed(2),
-      tradesScore: tradesScore.toFixed(2),
-      priceScore: priceScore.toFixed(2),
-      avgTokenPrice: avgTokenPrice.toFixed(3),
-      finalScore: confidenceScore.toFixed(2)
-    });
-    
     const creatorPerformance = {
       principal,
       username: user.username,
@@ -551,11 +598,14 @@ export const calculateCreatorPerformance = async (
       totalVolume,
       btcVolume,
       successRate,
-      weightedScore,
+      weightedScore: confidenceScore, // Ne pas utiliser l'ancienne formule de weightedScore, mais garder la compatibilité
       confidenceScore,
       totalHolders,
       totalTrades,
       lastTokenCreated,
+      totalMarketcap,
+      generatedMarketcapBTC: generatedMarketcap,
+      generatedMarketcapUSD: generatedMarketcapUSD,
       tokens: tokens.sort((a, b) => {
         const priceA = a.price_in_sats || a.price / 1000;
         const priceB = b.price_in_sats || b.price / 1000;
@@ -572,7 +622,7 @@ export const calculateCreatorPerformance = async (
     
     return creatorPerformance;
   } catch (error) {
-    console.error('Error calculating creator performance:', error);
+    console.error(`Error calculating performance for creator ${principal}:`, error);
     return null;
   }
 };
@@ -600,7 +650,7 @@ export type CreatorSortOption = 'volume' | 'active' | 'weighted' | 'confidence' 
 // Session storage key for creators cache
 const CREATORS_CACHE_KEY = 'forseti_creators_cache';
 const CREATORS_CACHE_TIMESTAMP_KEY = 'forseti_creators_cache_timestamp';
-const CACHE_EXPIRY_TIME = 30 * 60 * 1000; // 30 minutes in milliseconds
+const CACHE_EXPIRY_TIME = 20 * 60 * 1000; // 20 minutes in milliseconds
 const REDIS_CACHE_KEY = 'dev_tracker_creators_data';
 
 // Helper function to retry API calls
@@ -631,18 +681,23 @@ const retryApiCall = async <T>(
 // Find top creators based on their token performance
 export const findTopCreators = async (
   limit = 200, 
-  sortBy: CreatorSortOption = 'confidence'
+  sortBy: CreatorSortOption = 'confidence',
+  forceRefresh = false
 ): Promise<CreatorPerformance[]> => {
   try {
-    // Try to get data from cache
-    const redisData = await getFromRedis<CreatorPerformance[]>(REDIS_CACHE_KEY);
-    
-    if (redisData) {
-      console.log('Using cached creators data');
-      return sortCreatorsData(redisData, sortBy, limit);
+    // Try to get data from cache if not forcing refresh
+    if (!forceRefresh) {
+      const redisData = await getFromRedis<CreatorPerformance[]>(REDIS_CACHE_KEY);
+      
+      if (redisData) {
+        console.log('Using cached creators data');
+        return sortCreatorsData(redisData, sortBy, limit);
+      }
+    } else {
+      console.log('Force refresh enabled, bypassing cache for creators data');
     }
     
-    // If no valid cache, fetch fresh data through the proxy
+    // If no valid cache or force refresh, fetch fresh data through the proxy
     console.log('Fetching creators data through topTokens');
     
     // We'll get top tokens first through the proxy
@@ -660,8 +715,8 @@ export const findTopCreators = async (
     const creatorPrincipals = Array.from(creatorSet);
     console.log(`Found ${creatorPrincipals.length} unique creators from top tokens`);
     
-    // Calculate performance for each creator
-    const performancePromises = creatorPrincipals.map(principal => calculateCreatorPerformance(principal));
+    // Calculate performance for each creator with forceRefresh parameter
+    const performancePromises = creatorPrincipals.map(principal => calculateCreatorPerformance(principal, forceRefresh));
     
     const performances = await Promise.all(performancePromises);
     const validPerformances = performances.filter((perf): perf is CreatorPerformance => perf !== null);

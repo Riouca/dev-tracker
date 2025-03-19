@@ -15,6 +15,7 @@ export function Dashboard() {
   const [displayTime, setDisplayTime] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
   const [usdPrice, setUsdPrice] = useState<number | null>(null)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -41,18 +42,18 @@ export function Dashboard() {
 
   // Load creators on initial render and auto-refresh every 20 minutes
   useEffect(() => {
-    // Initial load
-    loadCreators()
+    // Initial load with force refresh to ensure fresh data on app startup
+    loadCreators(true);
     
     // Set up polling every 20 minutes (1200000 ms)
     const intervalId = setInterval(() => {
-      console.log('Auto-refreshing dashboard data...')
-      loadCreators()
-    }, 1200000) // 20 minutes
+      console.log('Auto-refreshing dashboard data...');
+      loadCreators(true);  // Force refresh every 20 minutes
+    }, 1200000); // 20 minutes
     
     // Clean up interval on unmount
-    return () => clearInterval(intervalId)
-  }, [])
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Sort creators when sortBy, sortDirection, or creators change
   useEffect(() => {
@@ -105,38 +106,41 @@ export function Dashboard() {
     return () => clearInterval(timeDisplayInterval)
   }, [lastUpdated])
 
-  const loadCreators = async () => {
+  const loadCreators = async (forceRefresh = false) => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       
-      // Use the findTopCreators API function
-      let tempCreators = await findTopCreators(200)
+      // Use the findTopCreators API function with forceRefresh parameter
+      // Don't force refresh on normal user interactions, only on scheduled refresh
+      let tempCreators = await findTopCreators(200, 'confidence', forceRefresh);
       
       // Filter out creators with no username
-      tempCreators = tempCreators.filter(creator => creator.username)
+      tempCreators = tempCreators.filter(creator => creator.username);
       
       // Get BTC price for USD conversion
       try {
-        const btcPrice = await getBTCPrice()
-        setUsdPrice(btcPrice)
+        const btcPrice = await getBTCPrice();
+        setUsdPrice(btcPrice);
       } catch (priceError) {
-        console.error('Error fetching BTC price:', priceError)
+        console.error('Error fetching BTC price:', priceError);
       }
       
-      setCreators(tempCreators)
-      setLastUpdated(new Date())
-      setLoading(false)
+      setCreators(tempCreators);
+      setLastUpdated(new Date());
+      setLoading(false);
+      setIsInitialLoad(false);
       
       // Initial filter and pagination
-      filterCreators(tempCreators)
-      updatePaginatedCreators()
+      filterCreators(tempCreators);
+      updatePaginatedCreators();
     } catch (error) {
-      console.error('Failed to load creators:', error)
-      setError('Failed to load data. Please try again later.')
-      setLoading(false)
+      console.error('Failed to load creators:', error);
+      setError('Failed to load data. Please try again later.');
+      setLoading(false);
+      setIsInitialLoad(false);
     }
-  }
+  };
 
   // Format the last updated time
   const formatLastUpdated = (date: Date) => {
@@ -465,10 +469,10 @@ export function Dashboard() {
         </div>
       </div>
       
-      {loading && paginatedCreators.length === 0 ? (
+      {loading ? (
         <div className="loading">
           <div className="loading-spinner"></div>
-          <p>Loading developers...</p>
+          <p className="loading-text">Loading developers...</p>
         </div>
       ) : error ? (
         <div className="error">
@@ -485,7 +489,7 @@ export function Dashboard() {
           ) : (
             <>
               <p>No developers found matching your search criteria.</p>
-              <p>Try adjusting your search or refreshing the data.</p>
+              <p>Try adjusting your search.</p>
             </>
           )}
         </div>
@@ -495,21 +499,20 @@ export function Dashboard() {
             {paginatedCreators.map((creator) => (
               <CreatorCard 
                 key={creator.principal} 
-                creator={creator} 
-                onUpdate={() => filterCreators()}
+                creator={creator}
               />
             ))}
           </div>
           
           {renderPagination()}
-          
-          <div className="last-updated-footer">
-            <span className="last-updated">
-              {lastUpdated ? `Last updated: ${displayTime}` : ''}
-            </span>
-          </div>
         </>
       )}
+      
+      <div className="last-updated-footer">
+        <span className="last-updated">
+          {lastUpdated ? `Last updated: ${displayTime}` : ''}
+        </span>
+      </div>
     </div>
   )
 } 
