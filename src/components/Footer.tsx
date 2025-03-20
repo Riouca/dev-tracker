@@ -27,6 +27,7 @@ function Footer() {
         </div>
         <div className="footer-info">
           <p className="copyright">© {currentYear} ForsetiScan</p>
+          <p className="made-by">Made with ❤️ by <a href="https://x.com/DraugrDev" target="_blank" rel="noopener noreferrer">@DraugrDev</a></p>
         </div>
       </div>
     </footer>

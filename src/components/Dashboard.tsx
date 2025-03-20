@@ -89,6 +89,52 @@ export function Dashboard() {
     }
   }, [searchQuery, creators])
 
+  // Add effect to handle follow status changes
+  useEffect(() => {
+    const handleFollowStatusChange = (event: Event) => {
+      // Extract details from the custom event
+      const detail = (event as CustomEvent).detail;
+      
+      if (!detail) return;
+      
+      const { action, principal } = detail;
+      
+      // If we're in the followed tab and unfollowing, allow animation to complete first
+      if (action === 'unfollow' && activeTab === 'followed') {
+        // Wait for animation to complete before refreshing the list
+        setTimeout(() => {
+          filterCreators();
+        }, 400); // Slightly longer than animation duration (300ms)
+      }
+      // Force reload creators in both tabs
+      // This makes sure the top developers tab gets updated when unfollowing
+      else if (action === 'unfollow' && activeTab === 'top') {
+        // If we're in top tab and unfollowing, make sure to reapply filters
+        const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]');
+        
+        // Make sure unfollowed dev appears in top tab
+        const creatorExists = creators.some(c => c.principal === principal);
+        if (!creatorExists) {
+          // If the creator isn't in our current list, reload all creators
+          loadCreators(false);
+        } else {
+          // Just refilter the current data
+          filterCreators();
+        }
+      } else {
+        // For other cases just refilter
+        filterCreators();
+      }
+    };
+    
+    // Listen for the custom follow status change event
+    window.addEventListener('followStatusChanged', handleFollowStatusChange);
+    
+    return () => {
+      window.removeEventListener('followStatusChanged', handleFollowStatusChange);
+    };
+  }, [creators, activeTab]);
+
   // Add effect to refresh the "Last updated" display every minute
   useEffect(() => {
     if (!lastUpdated) return
@@ -230,7 +276,11 @@ export function Dashboard() {
           // Search by developer name
           creator.username.toLowerCase().includes(query) ||
           // Search by principal ID
-          creator.principal.toLowerCase().includes(query)
+          creator.principal.toLowerCase().includes(query) ||
+          // Search by token names
+          (creator.tokens && creator.tokens.some(token => 
+            token.name.toLowerCase().includes(query)
+          ))
         )
       }
       setDisplayedCreators(filtered)

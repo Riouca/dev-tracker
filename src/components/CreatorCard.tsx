@@ -67,7 +67,10 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
     e.stopPropagation();
     const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]');
     
-    if (!isFollowed) {
+    // Determine if we're following or unfollowing
+    const isFollowAction = !isFollowed;
+    
+    if (isFollowAction) {
       // Create star burst effect when following
       createStarBurst(e);
       
@@ -98,6 +101,14 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
     setIsFollowed(!isFollowed);
     // Trigger storage event for other components to update
     window.dispatchEvent(new Event('storage'));
+    
+    // Trigger a custom event with detailed information about what happened
+    window.dispatchEvent(new CustomEvent('followStatusChanged', { 
+      detail: { 
+        principal: creator.principal,
+        action: isFollowAction ? 'follow' : 'unfollow'
+      }
+    }));
     
     // Call onUpdate if provided
     if (onUpdate) {
