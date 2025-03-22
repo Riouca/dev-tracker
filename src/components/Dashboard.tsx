@@ -26,8 +26,24 @@ export function Dashboard() {
   // Update followed creators count when localStorage changes
   useEffect(() => {
     const updateFollowedCount = () => {
-      const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]')
-      setFollowedCreatorsCount(followedCreators.length)
+      try {
+        const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]')
+        // Ensure we have a valid array
+        if (Array.isArray(followedCreators)) {
+          setFollowedCreatorsCount(followedCreators.length)
+          console.log('Followed creators count:', followedCreators.length)
+        } else {
+          // Reset to 0 if not an array
+          setFollowedCreatorsCount(0)
+          console.log('Invalid followed creators data, resetting to 0')
+          localStorage.setItem('followedCreators', '[]')
+        }
+      } catch (error) {
+        // Handle any JSON parsing errors
+        console.error('Error parsing followed creators:', error)
+        setFollowedCreatorsCount(0)
+        localStorage.setItem('followedCreators', '[]')
+      }
     }
 
     // Initial count
@@ -35,8 +51,12 @@ export function Dashboard() {
 
     // Listen for changes
     window.addEventListener('storage', updateFollowedCount)
+    // Also listen for custom follow events
+    window.addEventListener('followStatusChanged', updateFollowedCount)
+    
     return () => {
       window.removeEventListener('storage', updateFollowedCount)
+      window.removeEventListener('followStatusChanged', updateFollowedCount)
     }
   }, [])
 
@@ -263,15 +283,37 @@ export function Dashboard() {
 
   const filterCreators = (sortedCreators = creators) => {
     if (activeTab === 'followed') {
-      const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]')
-      const filtered = sortedCreators.filter(creator => followedCreators.includes(creator.principal))
-      setDisplayedCreators(filtered)
-      console.log(`Filtered to ${filtered.length} followed creators`)
+      try {
+        // Get followed creators from localStorage
+        const followedCreatorsStr = localStorage.getItem('followedCreators');
+        let followedCreators = [];
+        
+        // Parse safely with fallback to empty array
+        try {
+          followedCreators = JSON.parse(followedCreatorsStr || '[]');
+          if (!Array.isArray(followedCreators)) {
+            followedCreators = [];
+            // Fix the localStorage value
+            localStorage.setItem('followedCreators', '[]');
+          }
+        } catch (parseError) {
+          console.error('Error parsing followedCreators:', parseError);
+          // Reset localStorage to a valid value
+          localStorage.setItem('followedCreators', '[]');
+        }
+        
+        const filtered = sortedCreators.filter(creator => followedCreators.includes(creator.principal));
+        setDisplayedCreators(filtered);
+        console.log(`Filtered to ${filtered.length} followed creators`);
+      } catch (error) {
+        console.error('Error filtering followed creators:', error);
+        setDisplayedCreators([]);
+      }
     } else {
       // Apply search filter if search query exists
-      let filtered = sortedCreators
+      let filtered = sortedCreators;
       if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim()
+        const query = searchQuery.toLowerCase().trim();
         filtered = sortedCreators.filter(creator => 
           // Search by developer name
           creator.username.toLowerCase().includes(query) ||
@@ -281,14 +323,14 @@ export function Dashboard() {
           (creator.tokens && creator.tokens.some(token => 
             token.name.toLowerCase().includes(query)
           ))
-        )
+        );
       }
-      setDisplayedCreators(filtered)
-      console.log(`Filtered to ${filtered.length} top creators`)
+      setDisplayedCreators(filtered);
+      console.log(`Filtered to ${filtered.length} top creators`);
     }
     
     // Reset to first page when filtering changes
-    setCurrentPage(1)
+    setCurrentPage(1);
   }
 
   const updatePaginatedCreators = () => {

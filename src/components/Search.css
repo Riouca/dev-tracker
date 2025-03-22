@@ -1,0 +1,659 @@
+/* Search container */
+.search-container {
+  max-width: 90%;
+  min-width: 50%;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  color: var(--color-text);
+}
+
+/* Search header */
+.search-header {
+  margin-bottom: 2rem;
+}
+
+.search-title {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  color: var(--color-text);
+}
+
+.search-form {
+  margin-bottom: 1.5rem;
+}
+
+.search-input-wrapper {
+  display: flex;
+  position: relative;
+  max-width: 700px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 0.875rem 1rem;
+  padding-right: 3rem;
+  font-size: 1rem;
+  background-color: var(--color-background-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  color: var(--color-text);
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.search-button {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.search-button:hover {
+  color: var(--color-accent);
+  background-color: rgba(99, 102, 241, 0.1);
+}
+
+/* Search examples */
+.search-examples {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.search-example {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.2rem 0.5rem;
+  background-color: var(--color-background-secondary);
+  border-radius: 0.25rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.search-example:hover {
+  background-color: var(--color-border);
+}
+
+/* Search tabs */
+.search-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1.5rem;
+}
+
+.search-tab {
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.search-tab.active {
+  color: var(--color-accent);
+}
+
+.search-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--color-accent);
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+}
+
+.search-tab:hover:not(.active) {
+  color: var(--color-text);
+}
+
+/* Search content */
+.search-content {
+  min-height: 400px;
+}
+
+/* Loading state */
+.search-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 0;
+}
+
+.spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--color-accent);
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Initial and empty states */
+.search-initial-state,
+.search-empty-state,
+.search-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 0;
+  text-align: center;
+}
+
+.search-illustration {
+  margin-bottom: 1.5rem;
+  color: var(--color-text-secondary);
+}
+
+.search-initial-state h2,
+.search-empty-state h2,
+.search-error h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--color-text);
+}
+
+.search-initial-state p,
+.search-empty-state p,
+.search-error p {
+  color: var(--color-text-secondary);
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.search-error svg {
+  margin-bottom: 1rem;
+  color: var(--color-error);
+}
+
+.search-error h2 {
+  color: var(--color-error);
+}
+
+/* Search results */
+.search-results,
+.search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.token-result,
+.developer-result {
+  margin-top: 1rem;
+}
+
+/* Search section for developer info */
+.search-section {
+  margin-top: 2rem;
+}
+
+.search-section-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.5rem;
+}
+
+/* Ensure dashboard styling is consistent */
+.search-section .dashboard,
+.search-result .dashboard {
+  width: 100%;
+  padding: 0;
+  background: transparent;
+}
+
+/* Reset any previously added positioning that might conflict */
+.search-result .dashboard .creator-card,
+.search-section .dashboard .creator-card {
+  position: relative;
+  margin-bottom: 1rem;
+  /* Ensure no additional styling conflicts with dashboard */
+  box-shadow: none;
+}
+
+/* Remove specific positioning for search page creator actions */
+.search-result .dashboard .creator-actions,
+.search-section .dashboard .creator-actions {
+  position: static;
+  /* Ensure it displays exactly like in dashboard */
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Specific overrides for creator card within search page */
+.search-container .creator-card .creator-header {
+  padding: 1.5rem;
+}
+
+/* Token display - DUPLICATED STYLES FROM RECENT TOKENS COMPONENT */
+.token-full-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* EXISTING STYLES FOR COMPATIBILITY */
+.token-card {
+  background-color: var(--color-background-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.token-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.token-name-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.token-icon {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  flex-shrink: 0;
+  background-color: var(--color-background);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.token-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.token-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.token-name-text {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.token-details {
+  display: flex;
+  gap: 1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.token-ticker {
+  font-weight: 500;
+  color: var(--color-accent);
+}
+
+.token-price-section {
+  text-align: right;
+}
+
+.token-price {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.token-price-change {
+  font-size: 0.875rem;
+}
+
+.price-up {
+  color: var(--color-success);
+}
+
+.price-down {
+  color: var(--color-error);
+}
+
+.price-neutral {
+  color: var(--color-text-secondary);
+}
+
+.token-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: var(--color-background);
+  border-radius: 0.5rem;
+}
+
+.token-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.token-description {
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.token-links {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.token-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--color-background);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.token-link:hover {
+  background-color: var(--color-border);
+}
+
+.token-link svg {
+  flex-shrink: 0;
+}
+
+.token-link.twitter {
+  color: #1DA1F2;
+}
+
+.token-link.website {
+  color: var(--color-accent);
+}
+
+.token-link.telegram {
+  color: #0088cc;
+}
+
+.external-link-wrapper {
+  display: inline-flex;
+  margin-left: 0.5rem;
+  color: var(--color-text-secondary);
+  transition: color 0.2s ease;
+}
+
+.external-link-wrapper:hover {
+  color: var(--color-accent);
+}
+
+/* NEW SPECIFIC STYLES FOR SEARCH TOKEN DISPLAY */
+.search-token-card {
+  background-color: var(--color-background-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  transition: all 0.2s ease;
+}
+
+.search-token-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--color-border-hover);
+}
+
+.search-token-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.search-token-name-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.search-token-icon {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 0.625rem;
+  background-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.search-token-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-token-name {
+  font-weight: 600;
+  font-size: 1.125rem;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.search-token-name-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.search-token-creator {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.search-token-stats {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.search-token-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-stat-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.search-stat-value {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+/* Dashboard styling for developer result */
+.dashboard {
+  width: 100%;
+}
+
+/* Developer results */
+.search-developers-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .search-developers-grid {
+    grid-template-columns: repeat(1, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .search-developers-grid {
+    grid-template-columns: repeat(1, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .search-developers-grid {
+    grid-template-columns: repeat(1, 1fr);
+  }
+}
+
+/* Token results */
+.search-tokens-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* More results section */
+.search-more-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.search-more-results p {
+  color: var(--color-text-secondary);
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.search-more-button {
+  padding: 0.5rem 1.25rem;
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.search-more-button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--color-border-hover);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .token-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .token-price-section {
+    align-self: flex-start;
+    margin-top: 1rem;
+    text-align: left;
+  }
+  
+  .search-token-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .search-token-stats {
+    width: 100%;
+    margin-top: 1rem;
+  }
+}
+
+/* Creator avatar in search results */
+.creator-avatar img,
+.creator-avatar-placeholder {
+  width: 4.8rem !important;
+  height: 4.8rem !important;
+  border-radius: 0.75rem !important;
+  object-fit: contain !important;
+  background-color: var(--color-background) !important;
+}
+
+/* Token images in developer token list */
+.token-image-small {
+  width: 3.5rem !important;
+  height: 3.5rem !important;
+}
+
+.token-image-small img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0.5rem;
+} 

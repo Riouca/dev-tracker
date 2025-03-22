@@ -5,6 +5,7 @@ import { formatNumber, formatPrice, getTimeSince } from '../utils/formatters';
 interface CreatorCardProps {
   creator: CreatorPerformance;
   onUpdate?: () => void;
+  btcPrice?: number;
 }
 
 function getRarityColor(score: number): string {
@@ -36,7 +37,7 @@ function getTierName(score: number): string {
   return 'Scam';
 }
 
-function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
+function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFollowed, setIsFollowed] = useState(false);
   const [showUSD, setShowUSD] = useState(true); // Default to USD display
@@ -47,15 +48,22 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
     // Fetch BTC price in USD
     const fetchBTCPrice = async () => {
       try {
-        const price = await getBTCPrice();
-        setUsdPrice(price);
+        // Use provided btcPrice prop if available, otherwise fetch it
+        if (btcPrice) {
+          setUsdPrice(btcPrice);
+        } else {
+          const price = await getBTCPrice();
+          setUsdPrice(price);
+        }
       } catch (error) {
         console.error('Error fetching BTC price:', error);
+        // Fallback to a reasonable default
+        setUsdPrice(82000);
       }
     };
-
+    
     fetchBTCPrice();
-  }, []);
+  }, [btcPrice]);
 
   // Check if creator is followed on component mount
   useEffect(() => {
@@ -65,54 +73,75 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
 
   const toggleFollow = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const followedCreators = JSON.parse(localStorage.getItem('followedCreators') || '[]');
     
-    // Determine if we're following or unfollowing
-    const isFollowAction = !isFollowed;
-    
-    if (isFollowAction) {
-      // Create star burst effect when following
-      createStarBurst(e);
+    try {
+      // Get current followed creators
+      const followedCreatorsStr = localStorage.getItem('followedCreators');
+      let followedCreators = [];
       
-      // Add to followed
-      followedCreators.push(creator.principal);
-      localStorage.setItem('followedCreators', JSON.stringify(followedCreators));
-    } else {
-      // Remove from followed
-      const updatedFollowed = followedCreators.filter((p: string) => p !== creator.principal);
-      localStorage.setItem('followedCreators', JSON.stringify(updatedFollowed));
+      // Parse safely with fallback to empty array
+      try {
+        followedCreators = JSON.parse(followedCreatorsStr || '[]');
+        if (!Array.isArray(followedCreators)) {
+          followedCreators = [];
+        }
+      } catch (parseError) {
+        console.error('Error parsing followedCreators:', parseError);
+        followedCreators = [];
+      }
       
-      // If we're in the Dashboard on the 'followed' tab, remove this card immediately from display
-      const dashboardElement = document.querySelector('.dashboard');
-      const followedTabActive = document.querySelector('.dashboard-tab.active')?.textContent?.includes('Followed');
+      // Determine if we're following or unfollowing
+      const isFollowAction = !isFollowed;
       
-      if (dashboardElement && followedTabActive) {
-        // Find this card and remove it with animation
-        const card = (e.currentTarget as HTMLElement)?.closest('.creator-card');
-        if (card) {
-          card.classList.add('removing');
-          setTimeout(() => {
-            (card as HTMLElement).style.display = 'none';
-          }, 300); // Match this with CSS animation duration
+      if (isFollowAction) {
+        // Create star burst effect when following
+        createStarBurst(e);
+        
+        // Add to followed (avoid duplicates)
+        if (!followedCreators.includes(creator.principal)) {
+          followedCreators.push(creator.principal);
+        }
+        localStorage.setItem('followedCreators', JSON.stringify(followedCreators));
+      } else {
+        // Remove from followed
+        const updatedFollowed = followedCreators.filter((p: string) => p !== creator.principal);
+        localStorage.setItem('followedCreators', JSON.stringify(updatedFollowed));
+        
+        // If we're in the Dashboard on the 'followed' tab, remove this card immediately from display
+        const dashboardElement = document.querySelector('.dashboard');
+        const followedTabActive = document.querySelector('.dashboard-tab.active')?.textContent?.includes('Followed');
+        
+        if (dashboardElement && followedTabActive) {
+          // Find this card and remove it with animation
+          const card = (e.currentTarget as HTMLElement)?.closest('.creator-card');
+          if (card) {
+            card.classList.add('removing');
+            setTimeout(() => {
+              (card as HTMLElement).style.display = 'none';
+            }, 300); // Match this with CSS animation duration
+          }
         }
       }
-    }
-    
-    setIsFollowed(!isFollowed);
-    // Trigger storage event for other components to update
-    window.dispatchEvent(new Event('storage'));
-    
-    // Trigger a custom event with detailed information about what happened
-    window.dispatchEvent(new CustomEvent('followStatusChanged', { 
-      detail: { 
-        principal: creator.principal,
-        action: isFollowAction ? 'follow' : 'unfollow'
+      
+      setIsFollowed(!isFollowed);
+      
+      // Trigger both events to ensure all components update
+      window.dispatchEvent(new Event('storage'));
+      
+      // Trigger a custom event with detailed information about what happened
+      window.dispatchEvent(new CustomEvent('followStatusChanged', { 
+        detail: { 
+          principal: creator.principal,
+          action: isFollowAction ? 'follow' : 'unfollow'
+        }
+      }));
+      
+      // Call onUpdate if provided
+      if (onUpdate) {
+        onUpdate();
       }
-    }));
-    
-    // Call onUpdate if provided
-    if (onUpdate) {
-      onUpdate();
+    } catch (error) {
+      console.error('Error updating follow status:', error);
     }
   };
   
@@ -374,7 +403,7 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
       mcapScore: mcapScore.toFixed(1),
       // Additional contextual info
       volumeInUSD: volumeInUSD.toFixed(0),
-      generatedMarketcapUSD: (creator.generatedMarketcapUSD || 0).toFixed(0)
+      generatedMarketcapUSD: Math.round(creator.generatedMarketcapUSD || 0).toString()
     };
   }
 
@@ -421,7 +450,7 @@ function CreatorCard({ creator, onUpdate }: CreatorCardProps) {
                 </div>
                 <div className="creator-avg-price">
                   <span className="metric-label">Generated MCap:</span> 
-                  <span className="avg-price">${formatNumber(creator.generatedMarketcapUSD || 0)}</span>
+                  <span className="avg-price">${formatNumber(Math.round(creator.generatedMarketcapUSD || 0))}</span>
                 </div>
               </div>
             </div>

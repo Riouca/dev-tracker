@@ -36,6 +36,12 @@ function Header({ currentPage, onPageChange }: HeaderProps) {
             Recent Tokens
           </button>
           <button 
+            className={`nav-link ${currentPage === 'search' ? 'active' : ''}`}
+            onClick={() => onPageChange('search')}
+          >
+            Search
+          </button>
+          <button 
             className="nav-link info-link"
             onClick={toggleInfoModal}
           >

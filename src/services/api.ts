@@ -295,40 +295,59 @@ export const isTokenActive = (token: Token): boolean => {
   return isActive;
 };
 
-// Fetch token data by ID
+// Get individual token by ID
 export const getToken = async (tokenId: string): Promise<Token> => {
   try {
-    // Use proxy server
-    const response = await axios.get(`${PROXY_BASE_URL}/token/${tokenId}`);
+    const cacheKey = `${REDIS_TOKEN_KEY}_${tokenId}`;
+    const cachedToken = await getFromRedis<Token>(cacheKey);
+    
+    if (cachedToken) {
+      return cachedToken;
+    }
+    
+    // Fetch from API via proxy
+    const response = await axios.get(`${API_BASE_URL}/token/${tokenId}`);
     const token = response.data;
-    token.price_in_sats = convertPriceToSats(token.price);
-    isTokenActive(token); // Check and set activity status
+    
+    // Process token data
+    if (token) {
+      token.price_in_sats = convertPriceToSats(token.price);
+      isTokenActive(token);
+      
+      // Cache for 2 minutes
+      await setInRedis(cacheKey, token, 120);
+    }
     
     return token;
   } catch (error) {
-    console.error('Error fetching token:', error);
-    
-    // Fallback to cache if proxy server fails
-    const redisKey = `${REDIS_TOKEN_KEY}_${tokenId}`;
-    const redisData = await getFromRedis<Token>(redisKey);
-    if (redisData) {
-      console.log(`Proxy failed, using cached token data as fallback for ${tokenId}`);
-      return redisData;
-    }
-    
-    throw error;
+    console.error(`Error fetching token ${tokenId}:`, error);
+    throw new Error(`Token not found: ${tokenId}`);
   }
 };
 
-// Fetch user data by principal
-export const getUser = async (principal: string): Promise<User> => {
+// Get user/creator by principal
+export const getUser = async (principal: string): Promise<any> => {
   try {
-    // Use proxy server
-    const response = await axios.get(`${PROXY_BASE_URL}/user/${principal}`);
-    return response.data;
+    const cacheKey = `user_${principal}`;
+    const cachedUser = await getFromRedis<any>(cacheKey);
+    
+    if (cachedUser) {
+      return cachedUser;
+    }
+    
+    // Fetch from API directly (proxy not needed for this endpoint)
+    const response = await axios.get(`${API_BASE_URL}/user/${principal}`);
+    const user = response.data;
+    
+    if (user) {
+      // Cache for 10 minutes
+      await setInRedis(cacheKey, user, 600);
+    }
+    
+    return user;
   } catch (error) {
-    console.error('Error fetching user:', error);
-    throw error;
+    console.error(`Error fetching user ${principal}:`, error);
+    throw new Error(`User not found: ${principal}`);
   }
 };
 

@@ -3699,3 +3699,39 @@ body {
   margin-right: 4px;
   flex-shrink: 0;
 }
+
+/* Token social icons */
+.token-social-icons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  align-items: center;
+}
+
+.token-social-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background-color: var(--color-background);
+  transition: all 0.2s ease;
+}
+
+.token-social-icon:hover {
+  transform: translateY(-2px);
+  background-color: var(--color-border);
+}
+
+.token-social-icon.twitter {
+  color: #1DA1F2;
+}
+
+.token-social-icon.website {
+  color: var(--color-accent);
+}
+
+.token-social-icon.telegram {
+  color: #0088cc;
+}
