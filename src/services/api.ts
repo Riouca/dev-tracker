@@ -123,20 +123,6 @@ export interface CreatorPerformance {
   generatedMarketcapUSD: number;
 }
 
-// Define TraderPerformance interface
-export interface TraderPerformance {
-  principal: string;
-  username: string;
-  image?: string | null;
-  totalTokens: number;
-  activeTokens: number;
-  successRate: number;
-  totalVolume: number;
-  confidenceScore: number;
-  recentTokens: string[];
-  lastActive?: Date;
-}
-
 // Get token image URL
 export const getTokenImageUrl = (tokenId: string): string => {
   return `https://images.odin.fun/token/${tokenId}`;
@@ -173,7 +159,7 @@ export const getBTCPrice = async (): Promise<number> => {
     return response.data.bitcoin.usd;
   } catch (error) {
     console.error('Error fetching BTC price:', error);
-    return 84000; // Fallback price if API fails
+    return 85000; // Fallback price if API fails
   }
 };
 
@@ -465,9 +451,9 @@ export const calculateCreatorPerformance = async (
     let totalTrades = 0;
     let totalMarketcap = 0;
     
-    // Base marketcap par token (0.025 BTC)
+    // Base marketcap per token (0.025 BTC)
     const baseBtcMarketcapPerToken = 0.025;
-    const defaultBtcPrice = 82000; // Valeur par défaut du BTC en USD
+    const defaultBtcPrice = 85000; // Default BTC price in USD
     const btcPrice = await getBTCPrice() || defaultBtcPrice;
     
     tokens.forEach(token => {
@@ -515,11 +501,11 @@ export const calculateCreatorPerformance = async (
     const maxTrades = 6000; // 6000 transactions for maximum score
     const tradesScore = Math.min(100, (totalTrades / maxTrades) * 100);
     
-    // 4. Marketcap généré score: différence entre la marketcap totale et la base (0.025 BTC par token)
+    // 4. Generated marketcap score: difference between total marketcap and base (0.025 BTC per token)
     const baseMarketcap = tokens.length * baseBtcMarketcapPerToken;
     const generatedMarketcap = Math.max(0, totalMarketcap - baseMarketcap);
     
-    // Conversion en USD pour le log
+    // Conversion to USD for logging
     const generatedMarketcapUSD = generatedMarketcap * btcPrice;
     
     // 5. Marketcap score: linear scale based on generated marketcap over threshold
@@ -527,7 +513,7 @@ export const calculateCreatorPerformance = async (
     const maxMarketcapUSD = 100000; // $100K for maximum score
     const mcapScore = Math.min(100, (generatedMarketcapUSD / maxMarketcapUSD) * 100);
     
-    // 6. Success rate avec pénalité pour tokens inactifs
+    // 6. Success rate with penalty for inactive tokens
     let successScore = 0;
     if (tokens.length > 0) {
       // Base success rate (active/total percentage)
@@ -617,7 +603,7 @@ export const calculateCreatorPerformance = async (
       totalVolume,
       btcVolume,
       successRate,
-      weightedScore: confidenceScore, // Ne pas utiliser l'ancienne formule de weightedScore, mais garder la compatibilité
+      weightedScore: confidenceScore, // Keep weightedScore for compatibility, but use confidenceScore instead
       confidenceScore,
       totalHolders,
       totalTrades,
@@ -646,29 +632,12 @@ export const calculateCreatorPerformance = async (
   }
 };
 
-// Get user balances
-export const getUserBalances = async (principal: string): Promise<any> => {
-  try {
-    // Use proxy server
-    const response = await axios.get(`${PROXY_BASE_URL}/user/${principal}/balances`, {
-      params: {
-        lp: true,
-        limit: 999999
-      }
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching user balances:', error);
-    return null;
-  }
-};
-
 // Sort options for creators
 export type CreatorSortOption = 'volume' | 'active' | 'weighted' | 'confidence' | 'success' | 'tokens' | 'holders';
 
 // Session storage key for creators cache
-const CREATORS_CACHE_KEY = 'forseti_creators_cache';
-const CREATORS_CACHE_TIMESTAMP_KEY = 'forseti_creators_cache_timestamp';
+// const CREATORS_CACHE_KEY = 'forseti_creators_cache';
+// const CREATORS_CACHE_TIMESTAMP_KEY = 'forseti_creators_cache_timestamp';
 const CACHE_EXPIRY_TIME = 20 * 60 * 1000; // 20 minutes in milliseconds
 const REDIS_CACHE_KEY = 'dev_tracker_creators_data';
 
@@ -872,30 +841,6 @@ export const getUserTrades = async (principal: string, limit = 10): Promise<Trad
     return response.data.data || [];
   } catch (error) {
     console.error(`Error fetching trades for user ${principal}:`, error);
-    return [];
-  }
-};
-
-// Find top traders based on performance metrics
-export const findTopTraders = async (limit = 10): Promise<TraderPerformance[]> => {
-  try {
-    // For now, we'll use the top creators as traders
-    const topCreators = await findTopCreators(limit);
-    
-    // Convert creators to traders format
-    return topCreators.map(creator => ({
-      principal: creator.principal,
-      username: creator.username,
-      image: creator.image,
-      totalTokens: creator.totalTokens,
-      activeTokens: creator.activeTokens,
-      successRate: creator.successRate,
-      totalVolume: creator.totalVolume,
-      confidenceScore: creator.confidenceScore,
-      recentTokens: creator.tokens.slice(0, 3).map(token => token.id)
-    }));
-  } catch (error) {
-    console.error('Error finding top traders:', error);
     return [];
   }
 };

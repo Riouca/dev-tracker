@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CreatorPerformance, Token, convertPriceToSats, formatVolume, formatMarketcap, convertVolumeToBTC, getRarityLevel, getBTCPrice, convertBTCToUSD } from '../services/api';
+import { CreatorPerformance, formatVolume, formatMarketcap, getBTCPrice } from '../services/api';
 import { formatNumber, formatPrice, getTimeSince } from '../utils/formatters';
 
 interface CreatorCardProps {
@@ -27,22 +27,13 @@ function getRankMedal(rank: number | undefined): string {
   return '';
 }
 
-function getTierName(score: number): string {
-  if (score >= 100) return 'Legendary';
-  if (score >= 90) return 'Epic';
-  if (score >= 80) return 'Great';
-  if (score >= 70) return 'Okay';
-  if (score >= 60) return 'Neutral';
-  if (score >= 45) return 'Meh';
-  return 'Scam';
-}
+
 
 function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFollowed, setIsFollowed] = useState(false);
   const [showUSD, setShowUSD] = useState(true); // Default to USD display
   const [usdPrice, setUsdPrice] = useState<number | null>(null);
-  const [showConfidenceDetails, setShowConfidenceDetails] = useState(false);
 
   useEffect(() => {
     // Fetch BTC price in USD
@@ -58,7 +49,7 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
       } catch (error) {
         console.error('Error fetching BTC price:', error);
         // Fallback to a reasonable default
-        setUsdPrice(82000);
+        setUsdPrice(85000);
       }
     };
     
@@ -208,11 +199,6 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
   // Calculate total trades
   const totalTrades = creator.totalTrades || creator.tokens.reduce((sum, token) => sum + token.buy_count + token.sell_count, 0);
   
-  // Calculate average price of tokens
-  const avgPrice = creator.tokens.length > 0 
-    ? creator.tokens.reduce((sum, token) => sum + (token.price_in_sats || convertPriceToSats(token.price)), 0) / creator.tokens.length
-    : 0;
-
   // Get token image URL
   const getTokenImageUrl = (tokenId: string) => {
     return `https://images.odin.fun/token/${tokenId}`;
@@ -289,19 +275,7 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
     }
   };
 
-  // Add refresh function to manually update creator data
-  const refreshCreatorData = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onUpdate) {
-      onUpdate();
-    }
-  };
 
-  // Function to toggle confidence details popup
-  const toggleConfidenceDetails = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowConfidenceDetails(prev => !prev);
-  };
 
   // Get rarity level based on confidence score
   function getRarityLevel(score: number): string {
@@ -315,97 +289,7 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
     return 'scam';                          // Red
   }
 
-  // Calculate individual confidence score components
-  function getConfidenceScoreDetails(creator: CreatorPerformance) {
-    // Get component scores based on the weights
-    const successWeight = 0.35;  // 35% weight for success rate
-    const volumeWeight = 0.25;   // 25% weight for volume
-    const holdersWeight = 0.25;  // 25% weight for holders
-    const tradesWeight = 0.05;   // 5% weight for trades
-    const mcapWeight = 0.10;     // 10% weight for generated marketcap
 
-    // Get raw scores from the final score (estimating)
-    // We don't have access to the raw scores directly, so we'll use the final score to derive them
-    const totalScore = creator.confidenceScore;
-    
-    // Calculate raw scores from the creator data as much as possible
-    
-    // Success score - estimate based on active vs total tokens with penalty
-    let successScore = 0;
-    if (creator.totalTokens > 0) {
-      // Base success rate
-      const successRate = (creator.activeTokens / creator.totalTokens) * 100;
-      
-      // Pénalité pour tokens inactifs
-      const inactiveTokens = creator.totalTokens - creator.activeTokens;
-      const penaltyMultiplier = Math.pow(inactiveTokens / creator.totalTokens, 0.5);
-      
-      successScore = Math.max(0, successRate - (penaltyMultiplier * 20));
-      
-      // Cas spécial: 0 tokens actifs
-      if (creator.activeTokens === 0) {
-        successScore = Math.max(0, 100 - (creator.totalTokens * 5));
-      }
-    }
-    
-    // Volume score (estimated using linear scale)
-    const defaultBtcPrice = 82000; // Default BTC price in USD
-    const volumeInUSD = (creator.btcVolume || 0) * defaultBtcPrice;
-    const maxVolumeUSD = 600000; // $600K for max score
-    const volumeScore = Math.min(100, (volumeInUSD / maxVolumeUSD) * 100);
-    
-    // Holders score (estimated using linear scale)
-    const totalHolders = creator.totalHolders || 0;
-    const maxHolders = 600; // 600 holders for max score
-    const holdersScore = Math.min(100, (totalHolders / maxHolders) * 100);
-    
-    // Trades score (estimated using linear scale)
-    const totalTrades = creator.totalTrades || 0;
-    const maxTrades = 6000; // 6000 transactions for max score
-    const tradesScore = Math.min(100, (totalTrades / maxTrades) * 100);
-    
-    // Marketcap score (estimated using linear scale)
-    let mcapScore = 0;
-    if (creator.generatedMarketcapUSD !== undefined) {
-      const maxMarketcapUSD = 100000; // $100K for max score
-      mcapScore = Math.min(100, (creator.generatedMarketcapUSD / maxMarketcapUSD) * 100);
-    } else {
-      // Fallback calculation remains the same
-      const knownComponents = 
-        (successScore * successWeight) +
-        (volumeScore * volumeWeight) +
-        (holdersScore * holdersWeight) +
-        (tradesScore * tradesWeight);
-      
-      const mcapComponent = totalScore - knownComponents;
-      mcapScore = mcapComponent / mcapWeight * 100;
-    }
-    
-    // Calculate actual components
-    const successComponent = successScore * successWeight;
-    const volumeComponent = volumeScore * volumeWeight;
-    const holdersComponent = holdersScore * holdersWeight;
-    const tradesComponent = tradesScore * tradesWeight;
-    const mcapComponent = mcapScore * mcapWeight;
-    
-    return {
-      successComponent: successComponent.toFixed(1),
-      volumeComponent: volumeComponent.toFixed(1),
-      holdersComponent: holdersComponent.toFixed(1),
-      tradesComponent: tradesComponent.toFixed(1),
-      mcapComponent: mcapComponent.toFixed(1),
-      totalScore: totalScore.toFixed(1),
-      // Raw scores before weighting
-      successScore: successScore.toFixed(1),
-      volumeScore: volumeScore.toFixed(1),
-      holdersScore: holdersScore.toFixed(1),
-      tradesScore: tradesScore.toFixed(1),
-      mcapScore: mcapScore.toFixed(1),
-      // Additional contextual info
-      volumeInUSD: volumeInUSD.toFixed(0),
-      generatedMarketcapUSD: Math.round(creator.generatedMarketcapUSD || 0).toString()
-    };
-  }
 
   return (
     <div className={`creator-card ${isExpanded ? 'expanded' : ''}`}>

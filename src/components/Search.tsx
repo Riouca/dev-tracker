@@ -1,28 +1,20 @@
 import { useState, useEffect } from 'react'
 import { 
-  findTopCreators,
   getToken,
-  getUser,
-  getCreatorTokens,
   CreatorPerformance, 
   Token as ApiToken, 
   getBTCPrice,
   calculateCreatorPerformance,
   formatVolume,
-  formatMarketcap,
-  convertBTCToUSD,
-  convertVolumeToBTC
+  formatMarketcap
 } from '../services/api'
 import CreatorCard from './CreatorCard'
-import { formatNumber, formatPrice, getTimeSince } from '../utils/formatters'
 import './Search.css'
 
 function Search() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchType, setSearchType] = useState<'dev' | 'token' | null>(null)
   const [creator, setCreator] = useState<CreatorPerformance | null>(null)
   const [token, setToken] = useState<ApiToken | null>(null)
-  const [creatorTokens, setCreatorTokens] = useState<ApiToken[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [btcPrice, setBtcPrice] = useState<number | null>(null)
@@ -84,12 +76,10 @@ function Search() {
     setError(null)
     setCreator(null)
     setToken(null)
-    setCreatorTokens([])
     
     // Parse and clean the search query
     const parsedQuery = parseSearchQuery(searchQuery)
     const detectedType = identifySearchType(parsedQuery)
-    setSearchType(detectedType)
     
     try {
       if (detectedType === 'token') {
@@ -100,11 +90,6 @@ function Search() {
         // Get creator info if available
         if (tokenData.creator && typeof tokenData.creator === 'string') {
           try {
-            // Get creator data
-            const userData = await getUser(tokenData.creator)
-            
-            // Get creator's tokens
-            const creatorTokensData = await getCreatorTokens(tokenData.creator)
             
             // Calculate creator performance metrics
             const creatorPerformance = await calculateCreatorPerformance(
@@ -112,7 +97,6 @@ function Search() {
             )
             
             setCreator(creatorPerformance)
-            setCreatorTokens(creatorTokensData)
           } catch (err) {
             console.error('Error fetching token creator:', err)
           }
@@ -120,19 +104,12 @@ function Search() {
       } else {
         // Search for developer
         try {
-          // Get creator data
-          const userData = await getUser(parsedQuery)
-          
-          // Get creator's tokens
-          const creatorTokensData = await getCreatorTokens(parsedQuery)
-          
           // Calculate creator performance metrics
           const creatorPerformance = await calculateCreatorPerformance(
             parsedQuery
           )
           
           setCreator(creatorPerformance)
-          setCreatorTokens(creatorTokensData)
         } catch (err) {
           console.error('Error fetching developer:', err)
           setError('Developer not found. Please check the ID and try again.')

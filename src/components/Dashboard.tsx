@@ -1,5 +1,5 @@
 import { useState, useEffect, ChangeEvent } from 'react'
-import { findTopCreators, CreatorPerformance, CreatorSortOption, getBTCPrice } from '../services/api'
+import { findTopCreators, CreatorPerformance, CreatorSortOption } from '../services/api'
 import CreatorCard from './CreatorCard'
 
 export function Dashboard() {
@@ -7,13 +7,13 @@ export function Dashboard() {
   const [displayedCreators, setDisplayedCreators] = useState<CreatorPerformance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Default sorting is based on confidence score, which combines success rate,
+  // volume, and active tokens count for an overall developer assessment
   const [sortBy, setSortBy] = useState<CreatorSortOption>('confidence')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [displayTime, setDisplayTime] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [usdPrice, setUsdPrice] = useState<number | null>(null)
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -92,13 +92,6 @@ export function Dashboard() {
       // Filter out creators with no username
       tempCreators = tempCreators.filter(creator => creator.username);
       
-      // Get BTC price for USD conversion
-      try {
-        const btcPrice = await getBTCPrice();
-        setUsdPrice(btcPrice);
-      } catch (priceError) {
-        console.error('Error fetching BTC price:', priceError);
-      }
       
       setCreators(tempCreators);
       
@@ -108,7 +101,6 @@ export function Dashboard() {
       
       setLastUpdated(new Date());
       setLoading(false);
-      setIsInitialLoad(false);
       
       // Initial filter and pagination
       filterCreators(tempCreators);
@@ -117,7 +109,6 @@ export function Dashboard() {
       console.error('Failed to load creators:', error);
       setError('Failed to load data. Please try again later.');
       setLoading(false);
-      setIsInitialLoad(false);
     }
   };
 
