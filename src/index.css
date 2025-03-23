@@ -1813,8 +1813,8 @@ body {
 
 .search-container {
   position: relative;
-  width: 350px;
-  max-width: 550px;
+  width: 450px;
+  max-width: 650px;
   margin-bottom: 1.5rem;
 }
 
@@ -1825,7 +1825,7 @@ body {
   border: 1px solid var(--color-border);
   background-color: var(--color-surface);
   color: var(--color-text);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   transition: all 0.2s ease;
 }
 
@@ -3734,4 +3734,20 @@ body {
 
 .token-social-icon.telegram {
   color: #0088cc;
+}
+
+@keyframes yellowBlink {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0);
+    border-color: var(--color-border);
+  }
+  50% {
+    box-shadow: 0 0 10px 2px rgba(255, 215, 0, 0.7);
+    border-color: #FFD700;
+  }
+}
+
+.new-token-highlight {
+  animation: yellowBlink 0.35s ease-in-out 3;
+  border: 2px solid #FFD700;
 }

@@ -508,7 +508,7 @@ export function Dashboard() {
           <div className="search-container">
             <input
               type="text"
-              placeholder="Search by developper or token name..."
+              placeholder="Search by developer or token name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="search-input"

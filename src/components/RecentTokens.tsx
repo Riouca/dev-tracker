@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { 
   getUser, 
   getUserImageUrl, 
@@ -37,6 +37,10 @@ export function RecentTokens() {
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all')
   const [showConfidenceDetails, setShowConfidenceDetails] = useState<string | null>(null)
   const [favoriteTokens, setFavoriteTokens] = useState<Set<string>>(new Set())
+  const [newTokenIds, setNewTokenIds] = useState<Set<string>>(new Set())
+  
+  // Utiliser une référence pour stocker les IDs des tokens actuels
+  const currentTokenIdsRef = useRef<Set<string>>(new Set())
 
   const fetchRecentTokens = async () => {
     try {
@@ -51,6 +55,14 @@ export function RecentTokens() {
       
       // Combine both sets of tokens
       const allRecentTokens = [...newestTokens, ...olderTokens];
+      
+      // Utiliser la référence pour comparer les IDs
+      const currentTokenIds = currentTokenIdsRef.current;
+      
+      // Find new token IDs that weren't in the previous data
+      const justAddedTokenIds = newestTokens
+        .filter(token => !currentTokenIds.has(token.id))
+        .map(token => token.id);
       
       // Process tokens and fetch creator data with force refresh
       const tokensWithCreators: TokenWithCreator[] = []
@@ -72,6 +84,21 @@ export function RecentTokens() {
         }
       }
       
+      // Update the new token IDs if we found any
+      if (justAddedTokenIds.length > 0 && !loading) {
+        setNewTokenIds(new Set(justAddedTokenIds));
+        
+        // Clear the highlighting after 3 seconds
+        setTimeout(() => {
+          setNewTokenIds(new Set());
+        }, 3000);
+      } else {
+        setNewTokenIds(new Set());
+      }
+      
+      // Mettre à jour la référence avec les nouveaux IDs de tokens
+      currentTokenIdsRef.current = new Set(tokensWithCreators.map(item => item.token.id));
+      
       setTokens(tokensWithCreators)
       setFilteredTokens(tokensWithCreators)
       setLastUpdated(new Date())
@@ -82,6 +109,13 @@ export function RecentTokens() {
       setLoading(false)
     }
   }
+
+  // Initialiser la référence currentTokenIdsRef lorsque les tokens changent
+  useEffect(() => {
+    if (tokens.length > 0) {
+      currentTokenIdsRef.current = new Set(tokens.map(item => item.token.id));
+    }
+  }, [tokens]);
 
   // Load favorite tokens from localStorage
   useEffect(() => {
@@ -341,6 +375,14 @@ export function RecentTokens() {
         console.log('Refreshing newest tokens only...')
         const newestTokens = await getNewestTokens()
         
+        // Utiliser la référence pour comparer les IDs
+        const currentTokenIds = currentTokenIdsRef.current;
+        
+        // Find new token IDs that weren't in the previous data
+        const justAddedTokenIds = newestTokens
+          .filter(token => !currentTokenIds.has(token.id))
+          .map(token => token.id);
+        
         // Process newest tokens with fresh confidence scores
         const newestWithCreators = await Promise.all(
           newestTokens.map(async (token) => {
@@ -360,12 +402,26 @@ export function RecentTokens() {
           })
         )
         
-        // Update state by replacing only the newest tokens
+        // Update the new token IDs if we found any
+        if (justAddedTokenIds.length > 0) {
+          setNewTokenIds(new Set(justAddedTokenIds));
+          
+          // Clear the highlighting after 3 seconds
+          setTimeout(() => {
+            setNewTokenIds(new Set());
+          }, 3000);
+        }
+        
         setTokens(prevTokens => {
           // Remove the 4 newest tokens (assuming they're at the start)
           const olderTokens = prevTokens.slice(4)
           // Add the new newest tokens at the start
-          return [...newestWithCreators, ...olderTokens]
+          const updatedTokens = [...newestWithCreators, ...olderTokens];
+          
+          // Mettre à jour la référence avec les nouveaux IDs de tokens
+          currentTokenIdsRef.current = new Set(updatedTokens.map(item => item.token.id));
+          
+          return updatedTokens;
         })
         
         // Also update filtered tokens
@@ -552,7 +608,7 @@ export function RecentTokens() {
             {filteredTokens.map(({ token, creator }) => (
               <div 
                 key={token.id} 
-                className={`creator-card ${expandedCreators.has(`${creator?.principal}-${token.id}`) ? 'expanded' : ''}`}
+                className={`creator-card ${expandedCreators.has(`${creator?.principal}-${token.id}`) ? 'expanded' : ''} ${newTokenIds.has(token.id) ? 'new-token-highlight' : ''}`}
               >
                 <div className="creator-header" 
                   onClick={() => window.open(`https://odin.fun/token/${token.id}`, '_blank')}
