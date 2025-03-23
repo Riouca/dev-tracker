@@ -124,6 +124,23 @@ body {
   color: var(--color-accent);
 }
 
+/* Animation d'apparition de la barre au survol */
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background-color: var(--color-accent);
+  border-radius: 1px;
+  transition: width 0.3s ease-in-out;
+}
+
+.nav-link:hover::after {
+  width: 100%;
+}
+
 .nav-link.active {
   font-weight: 600;
   position: relative;
@@ -132,7 +149,7 @@ body {
 .nav-link.active::after {
   content: '';
   position: absolute;
-  bottom: -4px;
+  bottom: -6px;
   left: 0;
   width: 100%;
   height: 2px;
@@ -2520,22 +2537,24 @@ body {
 }
 
 .follow-button {
-  background-color: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--border-radius-sm);
-  padding: 0.5rem 1.25rem;
-  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.8rem;
+  background-color: transparent;
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
   font-weight: 500;
+  border-radius: var(--border-radius-sm);
   cursor: pointer;
-  transition: all 0.2s ease;
-  margin: 0 0.5rem;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s;
+  min-height: 2rem;
+  line-height: 1;
 }
 
 .follow-button:hover {
-  background-color: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .follow-button.following {
@@ -2707,22 +2726,27 @@ body {
 .recent-tokens-container .creator-stats {
   display: flex;
   margin-top: 0.5rem;
-  padding-top: 0.5rem;
+  padding: 0.75rem 0;
   border-top: 1px solid var(--color-border);
   gap: 0.5rem;
+  align-items: center;
+  justify-content: space-around;
+  min-height: 3.5rem;
 }
 
 .recent-tokens-container .creator-stat {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   flex: 1;
+  height: 100%;
 }
 
 .recent-tokens-container .stat-value {
   font-size: 0.9rem;
   font-weight: 600;
-  margin-bottom: 0;
+  margin-bottom: 0.25rem;
 }
 
 .recent-tokens-container .stat-label {

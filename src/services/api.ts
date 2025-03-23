@@ -785,7 +785,13 @@ const sortCreatorsData = (
       sortedPerformances = creators.sort((a, b) => b.weightedScore - a.weightedScore);
       break;
     case 'confidence':
-      sortedPerformances = creators.sort((a, b) => b.confidenceScore - a.confidenceScore);
+      sortedPerformances = creators.sort((a, b) => {
+        // Si les scores de confiance sont identiques, trier par volume
+        if (b.confidenceScore === a.confidenceScore) {
+          return b.totalVolume - a.totalVolume;
+        }
+        return b.confidenceScore - a.confidenceScore;
+      });
       break;
     case 'success':
       sortedPerformances = creators.sort((a, b) => b.successRate - a.successRate);
@@ -801,7 +807,13 @@ const sortCreatorsData = (
       });
       break;
     default:
-      sortedPerformances = creators.sort((a, b) => b.confidenceScore - a.confidenceScore);
+      sortedPerformances = creators.sort((a, b) => {
+        // Si les scores de confiance sont identiques, trier par volume
+        if (b.confidenceScore === a.confidenceScore) {
+          return b.totalVolume - a.totalVolume;
+        }
+        return b.confidenceScore - a.confidenceScore;
+      });
   }
   
   // Add ranking and calculate total holders

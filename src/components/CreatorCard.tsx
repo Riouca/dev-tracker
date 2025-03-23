@@ -460,7 +460,7 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
                 onClick={toggleFollow}
                 aria-label={isFollowed ? 'Unfollow creator' : 'Follow creator'}
               >
-                {isFollowed ? 'Following' : 'Follow'}
+                {isFollowed ? 'Following' : '⭐ Follow'}
               </button>
             </div>
           </div>

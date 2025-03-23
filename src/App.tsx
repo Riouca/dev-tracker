@@ -4,9 +4,10 @@ import Footer from './components/Footer'
 import { Dashboard } from './components/Dashboard'
 import { RecentTokens } from './components/RecentTokens'
 import Search from './components/Search'
+import { Favorites } from './components/Favorites'
 import './index.css'
 
-type Page = 'dashboard' | 'recent' | 'search'
+type Page = 'dashboard' | 'recent' | 'search' | 'favorites'
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard')
@@ -26,6 +27,7 @@ function App() {
         {currentPage === 'dashboard' && <Dashboard />}
         {currentPage === 'recent' && <RecentTokens />}
         {currentPage === 'search' && <Search />}
+        {currentPage === 'favorites' && <Favorites />}
       </main>
       <Footer />
     </div>

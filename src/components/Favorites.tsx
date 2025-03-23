@@ -1,10 +1,9 @@
 import { useState, useEffect, ChangeEvent } from 'react'
-import { findTopCreators, CreatorPerformance, CreatorSortOption, getBTCPrice } from '../services/api'
+import { calculateCreatorPerformance, CreatorPerformance, CreatorSortOption, getBTCPrice } from '../services/api'
 import CreatorCard from './CreatorCard'
 
-export function Dashboard() {
+export function Favorites() {
   const [creators, setCreators] = useState<CreatorPerformance[]>([])
-  const [displayedCreators, setDisplayedCreators] = useState<CreatorPerformance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<CreatorSortOption>('confidence')
@@ -13,7 +12,6 @@ export function Dashboard() {
   const [displayTime, setDisplayTime] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
   const [usdPrice, setUsdPrice] = useState<number | null>(null)
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -21,47 +19,37 @@ export function Dashboard() {
   const [paginatedCreators, setPaginatedCreators] = useState<CreatorPerformance[]>([])
   const [totalPages, setTotalPages] = useState(1)
 
-  // Load creators on initial render and auto-refresh every 20 minutes
+  // Load favorites on initial render and when localStorage changes
   useEffect(() => {
-    // Initial load with force refresh to ensure fresh data on app startup
-    loadCreators(true);
+    loadFavorites()
     
-    // Set up polling every 20 minutes (1200000 ms)
-    const intervalId = setInterval(() => {
-      console.log('Auto-refreshing dashboard data...');
-      loadCreators(true);  // Force refresh every 20 minutes
-    }, 1200000); // 20 minutes
+    // Listen for changes in localStorage
+    const handleStorageChange = () => {
+      loadFavorites()
+    }
     
-    // Clean up interval on unmount
-    return () => clearInterval(intervalId);
-  }, []);
-
-  // Sort creators when sortBy, sortDirection, or creators change
-  useEffect(() => {
-    if (creators.length > 0) {
-      sortCreators(sortBy, sortDirection)
-    }
-  }, [sortBy, sortDirection, creators])
-
-  // Update displayed creators when search query changes
-  useEffect(() => {
-    if (creators.length > 0) {
-      filterCreators()
-    }
-  }, [searchQuery, creators])
-
-  // Update paginated creators when displayedCreators or currentPage changes
-  useEffect(() => {
-    updatePaginatedCreators()
-  }, [displayedCreators, currentPage, creatorsPerPage])
-
-  // Check for cached timestamp
-  useEffect(() => {
-    const cachedTimestamp = sessionStorage.getItem('forseti_creators_cache_timestamp')
-    if (cachedTimestamp) {
-      setLastUpdated(new Date(parseInt(cachedTimestamp, 10)))
+    // Listen for custom follow events
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('followStatusChanged', handleStorageChange)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('followStatusChanged', handleStorageChange)
     }
   }, [])
+
+  // Sort creators when sortBy or sortDirection changes
+  useEffect(() => {
+    if (creators.length > 0) {
+      const sortedCreators = getSortedCreators(creators, sortBy, sortDirection)
+      setCreators(sortedCreators)
+    }
+  }, [sortBy, sortDirection])
+
+  // Update paginated creators when creators, currentPage, creatorsPerPage, or searchQuery changes
+  useEffect(() => {
+    updatePaginatedCreators()
+  }, [creators, currentPage, creatorsPerPage, searchQuery])
 
   // Add effect to refresh the "Last updated" display every minute
   useEffect(() => {
@@ -80,46 +68,72 @@ export function Dashboard() {
     return () => clearInterval(timeDisplayInterval)
   }, [lastUpdated])
 
-  const loadCreators = async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Toujours charger les créateurs triés par confiance
-      // Don't force refresh on normal user interactions, only on scheduled refresh
-      let tempCreators = await findTopCreators(200, 'confidence', forceRefresh);
-      
-      // Filter out creators with no username
-      tempCreators = tempCreators.filter(creator => creator.username);
-      
-      // Get BTC price for USD conversion
+  // Get BTC price for USD conversion
+  useEffect(() => {
+    const fetchBTCPrice = async () => {
       try {
-        const btcPrice = await getBTCPrice();
-        setUsdPrice(btcPrice);
-      } catch (priceError) {
-        console.error('Error fetching BTC price:', priceError);
+        const price = await getBTCPrice()
+        setUsdPrice(price)
+      } catch (error) {
+        console.error('Error fetching BTC price:', error)
+      }
+    }
+    
+    fetchBTCPrice()
+  }, [])
+
+  const loadFavorites = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Get followed creators from localStorage
+      const followedCreatorIds = JSON.parse(localStorage.getItem('followedCreators') || '[]')
+      
+      if (followedCreatorIds.length === 0) {
+        setCreators([])
+        setLoading(false)
+        setLastUpdated(new Date())
+        return
       }
       
-      setCreators(tempCreators);
+      // Fetch data for each followed creator
+      const creatorPromises = followedCreatorIds.map(
+        (principal: string) => calculateCreatorPerformance(principal)
+      )
+      
+      const creatorResults = await Promise.all(creatorPromises)
+      let validCreators = creatorResults
+        .filter((creator): creator is CreatorPerformance => creator !== null)
       
       // S'assurer que le tri est par défaut sur 'confidence' avec ordre descendant
-      setSortBy('confidence');
-      setSortDirection('desc');
+      setSortBy('confidence')
+      setSortDirection('desc')
       
-      setLastUpdated(new Date());
-      setLoading(false);
-      setIsInitialLoad(false);
+      // Trier par score de confiance dès le chargement
+      validCreators.sort((a, b) => {
+        // Si les scores de confiance sont identiques, trier par volume
+        if (b.confidenceScore === a.confidenceScore) {
+          return b.totalVolume - a.totalVolume
+        }
+        return b.confidenceScore - a.confidenceScore
+      })
       
-      // Initial filter and pagination
-      filterCreators(tempCreators);
-      updatePaginatedCreators();
+      // Mettre à jour les rangs après le tri
+      validCreators = validCreators.map((creator, index) => ({
+        ...creator,
+        rank: index + 1
+      }))
+      
+      setCreators(validCreators)
+      setLastUpdated(new Date())
+      setLoading(false)
     } catch (error) {
-      console.error('Failed to load creators:', error);
-      setError('Failed to load data. Please try again later.');
-      setLoading(false);
-      setIsInitialLoad(false);
+      console.error('Failed to load favorites:', error)
+      setError('Failed to load data. Please try again later.')
+      setLoading(false)
     }
-  };
+  }
 
   // Format the last updated time
   const formatLastUpdated = (date: Date) => {
@@ -142,8 +156,9 @@ export function Dashboard() {
     return `${diffDays} days ago`
   }
 
-  const sortCreators = (sortOption: CreatorSortOption, direction: 'asc' | 'desc' = 'desc') => {
-    let sortedCreators = [...creators]
+  // Get sorted creators without modifying the original array
+  const getSortedCreators = (creatorsToSort: CreatorPerformance[], sortOption: CreatorSortOption, direction: 'asc' | 'desc'): CreatorPerformance[] => {
+    let sortedCreators = [...creatorsToSort]
     
     const sortFn = (a: CreatorPerformance, b: CreatorPerformance): number => {
       let result = 0;
@@ -198,40 +213,29 @@ export function Dashboard() {
     
     console.log(`Sorted ${sortedCreators.length} creators by ${sortOption} in ${direction} order`)
     
-    // Filter based on search
-    filterCreators(sortedCreators)
-  }
-
-  const filterCreators = (sortedCreators = creators) => {
-    // Apply search filter if search query exists
-    let filtered = sortedCreators;
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = sortedCreators.filter(creator => 
-        // Search by developer name
-        creator.username.toLowerCase().includes(query) ||
-        // Search by principal ID
-        creator.principal.toLowerCase().includes(query) ||
-        // Search by token names
-        (creator.tokens && creator.tokens.some(token => 
-          token.name.toLowerCase().includes(query)
-        ))
-      );
-    }
-    setDisplayedCreators(filtered);
-    console.log(`Filtered to ${filtered.length} creators`);
-    
-    // Reset to first page when filtering changes
-    setCurrentPage(1);
+    return sortedCreators
   }
 
   const updatePaginatedCreators = () => {
+    // Filter creators by search query
+    let filteredCreators = [...creators]
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      filteredCreators = creators.filter(creator => 
+        creator.username.toLowerCase().includes(query) ||
+        creator.principal.toLowerCase().includes(query) ||
+        (creator.tokens && creator.tokens.some(token => 
+          token.name.toLowerCase().includes(query)
+        ))
+      )
+    }
+    
     const indexOfLastCreator = currentPage * creatorsPerPage
     const indexOfFirstCreator = indexOfLastCreator - creatorsPerPage
-    const currentCreators = displayedCreators.slice(indexOfFirstCreator, indexOfLastCreator)
+    const currentCreators = filteredCreators.slice(indexOfFirstCreator, indexOfLastCreator)
     
     setPaginatedCreators(currentCreators)
-    setTotalPages(Math.ceil(displayedCreators.length / creatorsPerPage))
+    setTotalPages(Math.ceil(filteredCreators.length / creatorsPerPage))
   }
 
   const handleSortChange = (newSortBy: CreatorSortOption) => {
@@ -364,11 +368,11 @@ export function Dashboard() {
   }
 
   return (
-    <div className="dashboard">
+    <div className="dashboard favorites">
       <div className="dashboard-header">
-        <h1>Developer Leaderboard</h1>
+        <h1>Followed Developers</h1>
         <p className="dashboard-description">
-          Track the most successful token creators on Odin.fun with our confidence score system
+          Track your favorite token creators
         </p>
       </div>
       
@@ -433,17 +437,17 @@ export function Dashboard() {
       {loading ? (
         <div className="loading">
           <div className="loading-spinner"></div>
-          <p className="loading-text">Loading developers...</p>
+          <p className="loading-text">Loading favorites...</p>
         </div>
       ) : error ? (
         <div className="error">
           <p>{error}</p>
           <p>Maybe you are rate limited, wait a bit</p>
         </div>
-      ) : displayedCreators.length === 0 ? (
+      ) : creators.length === 0 ? (
         <div className="empty-state">
-          <p>No developers found matching your search criteria.</p>
-          <p>Try adjusting your search.</p>
+          <p>You haven't followed any developers yet.</p>
+          <p>Browse the top developers and click "Follow" to add them here.</p>
         </div>
       ) : (
         <>
@@ -452,6 +456,7 @@ export function Dashboard() {
               <CreatorCard 
                 key={creator.principal} 
                 creator={creator}
+                btcPrice={usdPrice || undefined}
               />
             ))}
           </div>

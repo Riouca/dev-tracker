@@ -38,6 +38,7 @@ export function RecentTokens() {
   const [showConfidenceDetails, setShowConfidenceDetails] = useState<string | null>(null)
   const [favoriteTokens, setFavoriteTokens] = useState<Set<string>>(new Set())
   const [newTokenIds, setNewTokenIds] = useState<Set<string>>(new Set())
+  const [followedCreators, setFollowedCreators] = useState<string[]>([])
   
   // Utiliser une référence pour stocker les IDs des tokens actuels
   const currentTokenIdsRef = useRef<Set<string>>(new Set())
@@ -152,6 +153,122 @@ export function RecentTokens() {
     
     setFilteredTokens(filtered);
   }, [tokens, confidenceFilter]);
+
+  // Load followed creators from localStorage
+  useEffect(() => {
+    const updateFollowedCreators = () => {
+      try {
+        const creators = JSON.parse(localStorage.getItem('followedCreators') || '[]')
+        setFollowedCreators(Array.isArray(creators) ? creators : [])
+      } catch (error) {
+        console.error('Error parsing followed creators:', error)
+        setFollowedCreators([])
+      }
+    }
+    
+    updateFollowedCreators()
+    
+    // Listen for changes
+    window.addEventListener('storage', updateFollowedCreators)
+    window.addEventListener('followStatusChanged', updateFollowedCreators)
+    
+    return () => {
+      window.removeEventListener('storage', updateFollowedCreators)
+      window.removeEventListener('followStatusChanged', updateFollowedCreators)
+    }
+  }, [])
+
+  // Check if a creator is followed
+  const isCreatorFollowed = (principal: string): boolean => {
+    return followedCreators.includes(principal)
+  }
+  
+  // Toggle follow status for a creator
+  const toggleFollowCreator = (principal: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    try {
+      // Get current followed creators
+      let updatedFollowedCreators = [...followedCreators]
+      
+      // Determine if we're following or unfollowing
+      const isCurrentlyFollowed = isCreatorFollowed(principal)
+      
+      if (!isCurrentlyFollowed) {
+        // Create star burst effect when following
+        createStarBurst(e)
+        
+        // Add to followed (avoid duplicates)
+        if (!updatedFollowedCreators.includes(principal)) {
+          updatedFollowedCreators.push(principal)
+        }
+      } else {
+        // Remove from followed
+        updatedFollowedCreators = updatedFollowedCreators.filter(p => p !== principal)
+      }
+      
+      // Update localStorage
+      localStorage.setItem('followedCreators', JSON.stringify(updatedFollowedCreators))
+      
+      // Update local state
+      setFollowedCreators(updatedFollowedCreators)
+      
+      // Trigger both events to ensure all components update
+      window.dispatchEvent(new Event('storage'))
+      
+      // Trigger a custom event with detailed information about what happened
+      window.dispatchEvent(new CustomEvent('followStatusChanged', { 
+        detail: { 
+          principal: principal,
+          action: isCurrentlyFollowed ? 'unfollow' : 'follow'
+        }
+      }))
+    } catch (error) {
+      console.error('Error updating follow status:', error)
+    }
+  }
+  
+  // Function to create the star burst effect
+  const createStarBurst = (e: React.MouseEvent) => {
+    const button = e.currentTarget as HTMLElement
+    
+    // Create 3-5 stars
+    const starCount = Math.floor(Math.random() * 3) + 3
+    
+    for (let i = 0; i < starCount; i++) {
+      // Create a star
+      const star = document.createElement('div')
+      star.className = 'star-particle'
+      document.body.appendChild(star)
+      
+      // Position the star relative to the button
+      const rect = button.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+      
+      // Random angle and distance from center
+      const angle = Math.random() * Math.PI * 2
+      const distance = 10 + Math.random() * 30
+      
+      // Calculate final position
+      const x = centerX + Math.cos(angle) * distance
+      const y = centerY + Math.sin(angle) * distance
+      
+      // Apply position with fixed positioning relative to viewport
+      star.style.position = 'fixed'
+      star.style.left = `${x}px`
+      star.style.top = `${y}px`
+      star.style.zIndex = '9999'
+      star.style.animationDelay = `${Math.random() * 50}ms`
+      
+      // Remove star after animation completes
+      setTimeout(() => {
+        if (document.body.contains(star)) {
+          document.body.removeChild(star)
+        }
+      }, 500)
+    }
+  }
 
   // Format token volume display
   const formatTokenVolumeDisplay = (volume: number) => {
@@ -653,12 +770,12 @@ export function RecentTokens() {
                       <div className="token-social-icons">
                         {token.twitter && (
                           <a 
-                            href={`https://twitter.com/${token.twitter}`}
+                            href={token.twitter}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
                             className="token-social-icon twitter"
-                            title={`@${token.twitter}`}
+                            title="Twitter"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231L17.79 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -683,7 +800,7 @@ export function RecentTokens() {
                         )}
                         {token.telegram && (
                           <a 
-                            href={`https://t.me/${token.telegram}`}
+                            href={token.telegram}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
@@ -855,19 +972,21 @@ export function RecentTokens() {
                 )}
                 
                 <div className="creator-actions">
-                  <button 
-                    className="view-token-button follow-button"
-                    onClick={() => window.open(`https://odin.fun/token/${token.id}`, '_blank')}
-                  >
-                    View Token
-                  </button>
                   {creator && (
-                    <button 
-                      className="view-creator-button follow-button"
-                      onClick={() => window.open(`https://odin.fun/user/${creator.principal}`, '_blank')}
-                    >
-                      View Developer
-                    </button>
+                    <>
+                      <button 
+                        className="view-creator-button follow-button"
+                        onClick={() => window.open(`https://odin.fun/user/${creator.principal}`, '_blank')}
+                      >
+                        View Developer
+                      </button>
+                      <button 
+                        className={`follow-button ${isCreatorFollowed(creator.principal) ? 'following' : ''}`}
+                        onClick={(e) => toggleFollowCreator(creator.principal, e)}
+                      >
+                        {isCreatorFollowed(creator.principal) ? 'Following' : '⭐ Follow'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
