@@ -35,7 +35,7 @@ export const getFromRedis = async <T>(key: string): Promise<T | null> => {
 };
 
 // Set data in cache with expiry
-export const setInRedis = async <T>(key: string, data: T, expiryInSeconds = 1800): Promise<void> => {
+export const setInRedis = async <T>(key: string, data: T, _expiryInSeconds = 1800): Promise<void> => {
   try {
     const cacheItem: CacheItem<T> = {
       data,

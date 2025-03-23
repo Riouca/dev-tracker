@@ -620,7 +620,7 @@ export const calculateCreatorPerformance = async (
     
     // Cache the calculated performance
     try {
-      await setInRedis(cacheKey, creatorPerformance, 300); // Cache for 5 minutes
+      await setInRedis(cacheKey, creatorPerformance); // Cache for 5 minutes
     } catch (error) {
       console.error('Failed to cache creator performance:', error);
     }
