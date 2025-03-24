@@ -755,9 +755,9 @@ const sortCreatorsData = (
       break;
     case 'confidence':
       sortedPerformances = creators.sort((a, b) => {
-        // Si les scores de confiance sont identiques, trier par volume
+        // Si les scores de confiance sont identiques, trier par marketcap
         if (b.confidenceScore === a.confidenceScore) {
-          return b.totalVolume - a.totalVolume;
+          return b.totalMarketcap - a.totalMarketcap;
         }
         return b.confidenceScore - a.confidenceScore;
       });
@@ -777,9 +777,9 @@ const sortCreatorsData = (
       break;
     default:
       sortedPerformances = creators.sort((a, b) => {
-        // Si les scores de confiance sont identiques, trier par volume
+        // Si les scores de confiance sont identiques, trier par marketcap
         if (b.confidenceScore === a.confidenceScore) {
-          return b.totalVolume - a.totalVolume;
+          return b.totalMarketcap - a.totalMarketcap;
         }
         return b.confidenceScore - a.confidenceScore;
       });

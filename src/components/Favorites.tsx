@@ -175,9 +175,9 @@ export function Favorites() {
           break
         case 'confidence':
           result = b.confidenceScore - a.confidenceScore
-          // If confidence scores are equal, sort by volume as secondary criterion
+          // Si confidence scores are equal, sort by marketcap
           if (result === 0) {
-            result = b.totalVolume - a.totalVolume
+            result = b.totalMarketcap - a.totalMarketcap
           }
           break
         case 'success':
@@ -193,9 +193,9 @@ export function Favorites() {
           break
         default:
           result = b.confidenceScore - a.confidenceScore
-          // If confidence scores are equal, sort by volume as secondary criterion
+          // Si confidence scores are equal, sort by marketcap
           if (result === 0) {
-            result = b.totalVolume - a.totalVolume
+            result = b.totalMarketcap - a.totalMarketcap
           }
       }
       
