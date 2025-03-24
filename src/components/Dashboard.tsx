@@ -57,7 +57,7 @@ export function Dashboard() {
 
   // Check for cached timestamp
   useEffect(() => {
-    const cachedTimestamp = sessionStorage.getItem('forseti_creators_cache_timestamp')
+    const cachedTimestamp = localStorage.getItem('forseti_creators_cache_timestamp')
     if (cachedTimestamp) {
       setLastUpdated(new Date(parseInt(cachedTimestamp, 10)))
     }
@@ -100,6 +100,8 @@ export function Dashboard() {
       setSortDirection('desc');
       
       setLastUpdated(new Date());
+      // Store the timestamp in localStorage
+      localStorage.setItem('forseti_creators_cache_timestamp', Date.now().toString());
       setLoading(false);
       
       // Initial filter and pagination

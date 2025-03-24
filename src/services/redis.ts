@@ -1,5 +1,5 @@
 // Browser-compatible Redis-like cache service
-// This is a sessionStorage implementation that mimics the Redis interface
+// This is a localStorage implementation that mimics the Redis interface
 
 // Cache expiry time - 30 minutes in milliseconds
 const CACHE_EXPIRY_TIME = 30 * 60 * 1000;
@@ -12,7 +12,7 @@ interface CacheItem<T> {
 // Get data from cache
 export const getFromRedis = async <T>(key: string): Promise<T | null> => {
   try {
-    const storedData = sessionStorage.getItem(key);
+    const storedData = localStorage.getItem(key);
     if (!storedData) {
       return null;
     }
@@ -22,11 +22,11 @@ export const getFromRedis = async <T>(key: string): Promise<T | null> => {
     
     // Check if cache is expired
     if (now - cacheItem.timestamp > CACHE_EXPIRY_TIME) {
-      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
       return null;
     }
     
-    console.log(`Using cached data from sessionStorage for key: ${key}`);
+    console.log(`Using cached data from localStorage for key: ${key}`);
     return cacheItem.data;
   } catch (error) {
     console.error('Cache get error:', error);
@@ -42,8 +42,8 @@ export const setInRedis = async <T>(key: string, data: T, _expiryInSeconds = 180
       timestamp: Date.now()
     };
     
-    sessionStorage.setItem(key, JSON.stringify(cacheItem));
-    console.log(`Data cached in sessionStorage for key: ${key}`);
+    localStorage.setItem(key, JSON.stringify(cacheItem));
+    console.log(`Data cached in localStorage for key: ${key}`);
   } catch (error) {
     console.error('Cache set error:', error);
   }
