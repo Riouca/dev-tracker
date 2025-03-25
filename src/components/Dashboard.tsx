@@ -1,8 +1,12 @@
-import { useState, useEffect, ChangeEvent } from 'react'
+import { useState, useEffect, ChangeEvent, useContext } from 'react'
 import { findTopCreators, CreatorPerformance, CreatorSortOption } from '../services/api'
 import CreatorCard from './CreatorCard'
+import { PreloadContext } from '../App'
 
 export function Dashboard() {
+  // Contexte pour les données préchargées
+  const { dashboardData: preloadedData, updateDashboardData, lastDashboardUpdate } = useContext(PreloadContext)
+  
   const [creators, setCreators] = useState<CreatorPerformance[]>([])
   const [displayedCreators, setDisplayedCreators] = useState<CreatorPerformance[]>([])
   const [loading, setLoading] = useState(true)
@@ -20,21 +24,72 @@ export function Dashboard() {
   const [creatorsPerPage, setCreatorsPerPage] = useState(20)
   const [paginatedCreators, setPaginatedCreators] = useState<CreatorPerformance[]>([])
   const [totalPages, setTotalPages] = useState(1)
+  const [silentlyUpdating, setSilentlyUpdating] = useState(false)
+
+  // Utiliser les données préchargées dès le montage du composant
+  useEffect(() => {
+    if (preloadedData && preloadedData.length > 0) {
+      console.log('Using preloaded dashboard data')
+      setCreators(preloadedData)
+      setLoading(false)
+      setLastUpdated(lastDashboardUpdate || new Date())
+      
+      // Si les données préchargées sont récentes (moins de 5 minutes), ne pas forcer un rechargement
+      const now = new Date()
+      const isFresh = lastDashboardUpdate && (now.getTime() - lastDashboardUpdate.getTime() < 5 * 60 * 1000)
+      
+      if (!isFresh) {
+        // Si données trop anciennes, charger silencieusement
+        silentlyLoadData()
+      }
+    } else {
+      // Aucune donnée préchargée, charger normalement
+      loadCreators(true)
+    }
+  }, [])
+
+  // Méthode pour charger silencieusement les données sans état de chargement
+  const silentlyLoadData = async () => {
+    if (silentlyUpdating) return // Éviter les chargements parallèles
+    
+    try {
+      setSilentlyUpdating(true)
+      console.log('Silently updating dashboard data...')
+      let tempCreators = await findTopCreators(100, 'confidence', true)
+      
+      // Filter out creators with no username
+      tempCreators = tempCreators.filter(creator => creator.username)
+      
+      // Mettre à jour le contexte global pour le préchargement
+      updateDashboardData(tempCreators)
+      
+      // Mettre à jour l'état local
+      setCreators(tempCreators)
+      setLastUpdated(new Date())
+      
+      // Stocker le timestamp dans localStorage
+      localStorage.setItem('forseti_creators_cache_timestamp', Date.now().toString())
+    } catch (error) {
+      console.error('Silent update failed:', error)
+      // Pas d'affichage d'erreur à l'utilisateur pour les mises à jour silencieuses
+    } finally {
+      setSilentlyUpdating(false)
+    }
+  }
 
   // Load creators on initial render and auto-refresh every 20 minutes
   useEffect(() => {
-    // Initial load with force refresh to ensure fresh data on app startup
-    loadCreators(true);
+    // Initial load already handled by the first useEffect
     
     // Set up polling every 20 minutes (1200000 ms)
     const intervalId = setInterval(() => {
-      console.log('Auto-refreshing dashboard data...');
-      loadCreators(true);  // Force refresh every 20 minutes
-    }, 1200000); // 20 minutes
+      console.log('Auto-refreshing dashboard data...')
+      silentlyLoadData()  // Utiliser mise à jour silencieuse
+    }, 1200000) // 20 minutes
     
     // Clean up interval on unmount
-    return () => clearInterval(intervalId);
-  }, []);
+    return () => clearInterval(intervalId)
+  }, [])
 
   // Sort creators when sortBy, sortDirection, or creators change
   useEffect(() => {
@@ -82,37 +137,39 @@ export function Dashboard() {
 
   const loadCreators = async (forceRefresh = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      setLoading(true)
+      setError(null)
       
       // Toujours charger les créateurs triés par confiance
       // Don't force refresh on normal user interactions, only on scheduled refresh
-      let tempCreators = await findTopCreators(100, 'confidence', forceRefresh);
+      let tempCreators = await findTopCreators(100, 'confidence', forceRefresh)
       
       // Filter out creators with no username
-      tempCreators = tempCreators.filter(creator => creator.username);
+      tempCreators = tempCreators.filter(creator => creator.username)
       
+      // Mettre à jour le contexte global pour le préchargement
+      updateDashboardData(tempCreators)
       
-      setCreators(tempCreators);
+      setCreators(tempCreators)
       
       // S'assurer que le tri est par défaut sur 'confidence' avec ordre descendant
-      setSortBy('confidence');
-      setSortDirection('desc');
+      setSortBy('confidence')
+      setSortDirection('desc')
       
-      setLastUpdated(new Date());
+      setLastUpdated(new Date())
       // Store the timestamp in localStorage
-      localStorage.setItem('forseti_creators_cache_timestamp', Date.now().toString());
-      setLoading(false);
+      localStorage.setItem('forseti_creators_cache_timestamp', Date.now().toString())
+      setLoading(false)
       
       // Initial filter and pagination
-      filterCreators(tempCreators);
-      updatePaginatedCreators();
+      filterCreators(tempCreators)
+      updatePaginatedCreators()
     } catch (error) {
-      console.error('Failed to load creators:', error);
-      setError('Failed to load data. Please try again later.');
-      setLoading(false);
+      console.error('Failed to load creators:', error)
+      setError('Failed to load data. Please try again later.')
+      setLoading(false)
     }
-  };
+  }
 
   // Format the last updated time
   const formatLastUpdated = (date: Date) => {

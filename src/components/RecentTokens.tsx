@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useContext } from 'react'
 import { 
   getUserImageUrl, 
   getTokenImageUrl, 
@@ -14,6 +14,7 @@ import {
   getTokenHolderData
 } from '../services/api'
 import { formatPrice, formatNumber, getTimeSince, formatDeveloperHoldings } from '../utils/formatters'
+import { PreloadContext } from '../App'
 
 interface TokenWithCreator {
   token: ApiToken;
@@ -21,6 +22,16 @@ interface TokenWithCreator {
 }
 
 export function RecentTokens() {
+  // Contexte pour les données préchargées
+  const { 
+    recentTokens: preloadedNewestTokens, 
+    olderTokens: preloadedOlderTokens,
+    updateRecentTokens,
+    updateOlderTokens,
+    lastRecentUpdate,
+    lastOlderUpdate
+  } = useContext(PreloadContext)
+  
   const [tokens, setTokens] = useState<TokenWithCreator[]>([])
   const [filteredTokens, setFilteredTokens] = useState<TokenWithCreator[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,9 +44,166 @@ export function RecentTokens() {
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all')
   const [newTokenIds, setNewTokenIds] = useState<Set<string>>(new Set())
   const [followedCreators, setFollowedCreators] = useState<string[]>([])
+  const [silentlyUpdating, setSilentlyUpdating] = useState(false)
   
   // Utiliser a reference to store the current token IDs
   const currentTokenIdsRef = useRef<Set<string>>(new Set())
+
+  // Utiliser les données préchargées si disponibles
+  useEffect(() => {
+    // Vérifier si nous avons des données préchargées
+    if ((preloadedNewestTokens && preloadedNewestTokens.length > 0) || 
+        (preloadedOlderTokens && preloadedOlderTokens.length > 0)) {
+      
+      console.log('Using preloaded tokens data')
+      processPreloadedTokens()
+    } else {
+      // Sinon charger normalement
+      fetchRecentTokens()
+    }
+    
+    // Setup interval for periodic refresh
+    const intervalId = setInterval(() => {
+      silentlyRefreshTokens()
+    }, 60000) // Refresh every minute
+    
+    // Cleanup
+    return () => clearInterval(intervalId)
+  }, [])
+  
+  // Traiter les données préchargées
+  const processPreloadedTokens = async () => {
+    try {
+      setLoading(true)
+      
+      const combinedTokens = [...(preloadedNewestTokens || []), ...(preloadedOlderTokens || [])]
+      
+      if (combinedTokens.length === 0) {
+        // Si pas de données préchargées, charger normalement
+        fetchRecentTokens()
+        return
+      }
+      
+      // Traiter les tokens et récupérer les données créateurs
+      const tokensWithCreators: TokenWithCreator[] = []
+      
+      for (const token of combinedTokens) {
+        try {
+          // Utiliser force=false car c'est un chargement initial
+          const creatorPerformance = await calculateCreatorPerformance(token.creator, false)
+          tokensWithCreators.push({
+            token: token,
+            creator: creatorPerformance
+          })
+        } catch (err) {
+          console.error(`Error fetching creator data for token ${token.id}:`, err)
+          tokensWithCreators.push({
+            token: token,
+            creator: null
+          })
+        }
+      }
+      
+      // Mettre à jour l'ID des tokens existants
+      currentTokenIdsRef.current = new Set(tokensWithCreators.map(item => item.token.id))
+      
+      setTokens(tokensWithCreators)
+      setFilteredTokens(tokensWithCreators)
+      setLastUpdated(new Date())
+      setLoading(false)
+      
+      // Vérifier si les données préchargées sont récentes (moins de 30 secondes)
+      const now = new Date()
+      const isNewestFresh = lastRecentUpdate && (now.getTime() - lastRecentUpdate.getTime() < 30 * 1000)
+      
+      if (!isNewestFresh) {
+        // Mise à jour silencieuse si les données sont trop anciennes
+        silentlyRefreshTokens()
+      }
+    } catch (err) {
+      console.error('Error processing preloaded tokens:', err)
+      setError('Failed to process token data. Please try again later.')
+      setLoading(false)
+      
+      // En cas d'erreur, essayer un chargement normal
+      fetchRecentTokens()
+    }
+  }
+  
+  // Rafraîchir silencieusement sans état de chargement
+  const silentlyRefreshTokens = async () => {
+    if (silentlyUpdating) return // Éviter les mises à jour parallèles
+    
+    try {
+      setSilentlyUpdating(true)
+      console.log('Silently refreshing token data...')
+      
+      // Fetch newest tokens first (refreshed every 20 seconds)
+      const newestTokens = await getNewestTokens()
+      
+      // Update context
+      updateRecentTokens(newestTokens)
+      
+      // Fetch older recent tokens (refreshed every 5 minutes)
+      // Only refetch if data is stale (older than 4 minutes)
+      let olderTokens = preloadedOlderTokens
+      if (!lastOlderUpdate || (new Date().getTime() - lastOlderUpdate.getTime() > 4 * 60 * 1000)) {
+        olderTokens = await getOlderRecentTokens()
+        updateOlderTokens(olderTokens)
+      }
+      
+      // Combine both sets of tokens
+      const allRecentTokens = [...newestTokens, ...(olderTokens || [])]
+      
+      // Check for new tokens to highlight
+      const currentTokenIds = currentTokenIdsRef.current
+      const justAddedTokenIds = newestTokens
+        .filter(token => !currentTokenIds.has(token.id))
+        .map(token => token.id)
+      
+      // Process tokens and fetch creator data
+      const tokensWithCreators: TokenWithCreator[] = []
+      
+      // Fetch creator performance for each token - use false to avoid excessive API calls
+      for (const token of allRecentTokens) {
+        try {
+          const creatorPerformance = await calculateCreatorPerformance(token.creator, false)
+          tokensWithCreators.push({
+            token: token,
+            creator: creatorPerformance
+          })
+        } catch (err) {
+          console.error(`Error fetching creator data for token ${token.id}:`, err)
+          tokensWithCreators.push({
+            token: token,
+            creator: null
+          })
+        }
+      }
+      
+      // Update the new token IDs if we found any
+      if (justAddedTokenIds.length > 0) {
+        setNewTokenIds(new Set(justAddedTokenIds))
+        
+        // Clear the highlighting after 3 seconds
+        setTimeout(() => {
+          setNewTokenIds(new Set())
+        }, 3000)
+      }
+      
+      // Update the reference with the new token IDs
+      currentTokenIdsRef.current = new Set(tokensWithCreators.map(item => item.token.id))
+      
+      setTokens(tokensWithCreators)
+      setFilteredTokens(tokensWithCreators)
+      setLastUpdated(new Date())
+    } catch (err) {
+      console.error('Silent token refresh failed:', err)
+      // No visible error for silent updates
+    } finally {
+      setSilentlyUpdating(false)
+    }
+  }
 
   const fetchRecentTokens = async () => {
     try {
@@ -43,21 +211,27 @@ export function RecentTokens() {
       setError(null)
       
       // Fetch newest tokens (refreshed every 20 seconds)
-      const newestTokens = await getNewestTokens();
+      const newestTokens = await getNewestTokens()
+      
+      // Update context
+      updateRecentTokens(newestTokens)
       
       // Fetch older recent tokens (refreshed every 5 minutes)
-      const olderTokens = await getOlderRecentTokens();
+      const olderTokens = await getOlderRecentTokens()
+      
+      // Update context
+      updateOlderTokens(olderTokens)
       
       // Combine both sets of tokens
-      const allRecentTokens = [...newestTokens, ...olderTokens];
+      const allRecentTokens = [...newestTokens, ...olderTokens]
       
       // Use the reference to compare IDs
-      const currentTokenIds = currentTokenIdsRef.current;
+      const currentTokenIds = currentTokenIdsRef.current
       
       // Find new token IDs that weren't in the previous data
       const justAddedTokenIds = newestTokens
         .filter(token => !currentTokenIds.has(token.id))
-        .map(token => token.id);
+        .map(token => token.id)
       
       // Process tokens and fetch creator data with force refresh
       const tokensWithCreators: TokenWithCreator[] = []
@@ -81,18 +255,18 @@ export function RecentTokens() {
       
       // Update the new token IDs if we found any
       if (justAddedTokenIds.length > 0 && !loading) {
-        setNewTokenIds(new Set(justAddedTokenIds));
+        setNewTokenIds(new Set(justAddedTokenIds))
         
         // Clear the highlighting after 3 seconds
         setTimeout(() => {
-          setNewTokenIds(new Set());
-        }, 3000);
+          setNewTokenIds(new Set())
+        }, 3000)
       } else {
-        setNewTokenIds(new Set());
+        setNewTokenIds(new Set())
       }
       
       // Update the reference with the new token IDs
-      currentTokenIdsRef.current = new Set(tokensWithCreators.map(item => item.token.id));
+      currentTokenIdsRef.current = new Set(tokensWithCreators.map(item => item.token.id))
       
       setTokens(tokensWithCreators)
       setFilteredTokens(tokensWithCreators)
