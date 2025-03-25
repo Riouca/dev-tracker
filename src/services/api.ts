@@ -378,10 +378,11 @@ export const getTopTokens = async (limit = 30, sort = 'marketcap'): Promise<Toke
 };
 
 // Fetch tokens created by a specific creator
-export const getCreatorTokens = async (principal: string, limit = 20): Promise<Token[]> => {
+export const getCreatorTokens = async (principal: string, limit = 20, forceRefresh = false): Promise<Token[]> => {
   try {
-    // Use proxy server
-    const response = await axios.get(`${PROXY_BASE_URL}/creator/${principal}/tokens`, {
+    // Use proxy server with cache-busting if force refresh is enabled
+    const cacheParam = forceRefresh ? `?_t=${Date.now()}` : '';
+    const response = await axios.get(`${PROXY_BASE_URL}/creator/${principal}/tokens${cacheParam}`, {
       params: { limit }
     });
     
@@ -427,7 +428,8 @@ export const calculateCreatorPerformance = async (
     
     // If forcing refresh or no cache, calculate fresh performance
     const user = await getUser(principal);
-    const tokens = await getCreatorTokens(principal, 25);
+    // Pass forceRefresh to getCreatorTokens to ensure we get fresh data
+    const tokens = await getCreatorTokens(principal, 25, forceRefresh);
     
     if (!user || tokens.length === 0) {
       return null;
@@ -663,7 +665,13 @@ export const findTopCreators = async (
     console.log(`Found ${creatorPrincipals.length} unique creators from top tokens`);
     
     // Calculate performance for each creator with forceRefresh parameter
-    const performancePromises = creatorPrincipals.map(principal => calculateCreatorPerformance(principal, forceRefresh));
+    const performancePromises = creatorPrincipals.map(principal => {
+      // Log which creator is being processed with force refresh
+      if (forceRefresh) {
+        console.log(`Force refreshing creator data for ${principal}`)
+      }
+      return calculateCreatorPerformance(principal, forceRefresh)
+    });
     
     const performances = await Promise.all(performancePromises);
     const validPerformances = performances.filter((perf): perf is CreatorPerformance => perf !== null);

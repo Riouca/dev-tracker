@@ -160,15 +160,42 @@ export function RecentTokens() {
       const justAddedTokenIds = newestTokens
         .filter(token => !currentTokenIds.has(token.id))
         .map(token => token.id)
+        
+      // Track affected creators to ensure their data is fresh
+      const affectedCreators = new Set<string>()
+      const creatorToNewTokensMap = new Map<string, ApiToken[]>()
       
-      // Process tokens and fetch creator data
-      const tokensWithCreators: TokenWithCreator[] = []
+      // Add creators of new tokens to the list of affected creators
+      justAddedTokenIds.forEach(tokenId => {
+        const token = newestTokens.find(t => t.id === tokenId)
+        if (token && token.creator) {
+          affectedCreators.add(token.creator)
+          
+          // Group new tokens by creator
+          if (!creatorToNewTokensMap.has(token.creator)) {
+            creatorToNewTokensMap.set(token.creator, [])
+          }
+          creatorToNewTokensMap.get(token.creator)?.push(token)
+        }
+      })
       
       // Fetch token holder data for more accurate metrics
+      const tokensWithCreators: TokenWithCreator[] = []
+      
       for (const token of allRecentTokens) {
         try {
-          // Force refresh creator data to ensure metrics are current
-          const creatorPerformance = await calculateCreatorPerformance(token.creator, true)
+          // Force refresh creator data for affected creators (those with new tokens) or 
+          // use normal refresh for others
+          const forceRefreshCreator = affectedCreators.has(token.creator)
+          if (forceRefreshCreator) {
+            console.log(`Forcing refresh of creator data for ${token.creator} because they have new tokens`)
+          }
+          
+          // Get fresh creator performance data
+          const creatorPerformance = await calculateCreatorPerformance(
+            token.creator, 
+            forceRefreshCreator // Force refresh only for creators with new tokens
+          )
           
           // Get fresh holder data
           const holderData = await getTokenHolderData(token.id)
@@ -181,6 +208,7 @@ export function RecentTokens() {
             holder_dev: holderData.holder_dev
           }
           
+          // Add the result to our collection
           tokensWithCreators.push({
             token: updatedToken,
             creator: creatorPerformance
@@ -192,6 +220,53 @@ export function RecentTokens() {
             creator: null
           })
         }
+      }
+      
+      // For tokens that were just added, ensure they also appear in the creator's token list
+      // This addresses the case where a creator's profile might not reflect their newest token immediately
+      if (justAddedTokenIds.length > 0) {
+        // Create a map of tokens by creator for quick access
+        const tokensByCreator = new Map<string, TokenWithCreator[]>();
+        
+        tokensWithCreators.forEach(tokenWithCreator => {
+          const creatorId = tokenWithCreator.token.creator;
+          if (!tokensByCreator.has(creatorId)) {
+            tokensByCreator.set(creatorId, []);
+          }
+          tokensByCreator.get(creatorId)?.push(tokenWithCreator);
+        });
+        
+        // Process each affected creator
+        affectedCreators.forEach(creatorId => {
+          const creatorTokens = tokensByCreator.get(creatorId) || [];
+          const newTokensByCreator = creatorToNewTokensMap.get(creatorId) || [];
+          
+          // Skip if no tokens or no creator found
+          if (creatorTokens.length === 0 || !creatorTokens[0].creator) return;
+          
+          // Update all tokens by this creator to include the new tokens in their creator's token list
+          creatorTokens.forEach(tokenWithCreator => {
+            if (tokenWithCreator.creator) {
+              // Get the current set of token IDs
+              const existingTokenIds = new Set(tokenWithCreator.creator.tokens.map(t => t.id));
+              
+              // Find tokens that need to be added
+              const tokensToAdd = newTokensByCreator.filter(newToken => 
+                !existingTokenIds.has(newToken.id)
+              );
+              
+              // If we have tokens to add, create a new creator object with the updated list
+              if (tokensToAdd.length > 0) {
+                const updatedTokens = [...tokenWithCreator.creator.tokens, ...tokensToAdd];
+                tokenWithCreator.creator = {
+                  ...tokenWithCreator.creator,
+                  tokens: updatedTokens,
+                  totalTokens: updatedTokens.length
+                };
+              }
+            }
+          });
+        });
       }
       
       // Update the new token IDs if we found any
@@ -245,14 +320,28 @@ export function RecentTokens() {
       const justAddedTokenIds = newestTokens
         .filter(token => !currentTokenIds.has(token.id))
         .map(token => token.id)
+        
+      // Track affected creators to ensure their data is fresh
+      const affectedCreators = new Set<string>()
+      
+      // Add creators of new tokens and add them to the affected list
+      justAddedTokenIds.forEach(tokenId => {
+        const token = newestTokens.find(t => t.id === tokenId)
+        if (token && token.creator) {
+          affectedCreators.add(token.creator)
+        }
+      })
       
       // Process tokens and fetch creator data with force refresh
       const tokensWithCreators: TokenWithCreator[] = []
       
-      // Fetch creator performance for each token with force refresh for accurate metrics
+      // Fetch creator performance for each token with appropriate refresh strategy
       for (const token of allRecentTokens) {
         try {
-          const creatorPerformance = await calculateCreatorPerformance(token.creator, true)
+          // Force refresh for affected creators or initial load
+          const forceRefreshCreator = affectedCreators.has(token.creator) || justAddedTokenIds.length === 0
+          
+          const creatorPerformance = await calculateCreatorPerformance(token.creator, forceRefreshCreator)
           tokensWithCreators.push({
             token: token,
             creator: creatorPerformance
