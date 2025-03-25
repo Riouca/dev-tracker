@@ -316,8 +316,8 @@ export const getUser = async (principal: string): Promise<any> => {
       return cachedUser;
     }
     
-    // Fetch from API directly (proxy not needed for this endpoint)
-    const response = await axios.get(`${API_BASE_URL}/user/${principal}`);
+    // Use proxy server like other endpoints to avoid CORS issues
+    const response = await axios.get(`${PROXY_BASE_URL}/user/${principal}`);
     const user = response.data;
     
     if (user) {
@@ -637,57 +637,34 @@ export const findTopCreators = async (
     // Try to get data from cache if not forcing refresh
     if (!forceRefresh) {
       const redisData = await getFromRedis<CreatorPerformance[]>(REDIS_CACHE_KEY);
+      const redisTimestampKey = `${REDIS_CACHE_KEY}_timestamp`;
+      const cachedTimestamp = await getFromRedis<number>(redisTimestampKey);
       
       if (redisData) {
-        console.log('Using cached creators data');
-        return sortCreatorsData(redisData, sortBy, limit);
+        // Check if data is still fresh (less than CACHE_EXPIRY_TIME old)
+        const now = Date.now();
+        const isFresh = cachedTimestamp && (now - cachedTimestamp < CACHE_EXPIRY_TIME);
+        
+        if (isFresh) {
+          console.log('Using fresh cached creators data from Redis');
+          return sortCreatorsData(redisData, sortBy, limit);
+        } else {
+          console.log('Cached creators data exists but is stale, refreshing in background');
+          // For stale data, still use it but refresh in background (non-blocking)
+          setTimeout(() => {
+            refreshCreatorsCache().catch(err => 
+              console.error('Background refresh of creators cache failed:', err)
+            );
+          }, 100);
+          return sortCreatorsData(redisData, sortBy, limit);
+        }
       }
     } else {
       console.log('Force refresh enabled, bypassing cache for creators data');
     }
     
     // If no valid cache or force refresh, fetch fresh data through the proxy
-    console.log('Fetching creators data through topTokens');
-    
-    // We'll get top tokens first through the proxy
-    const topTokens = await getTopTokens(200);
-    console.log(`Fetched ${topTokens.length} top tokens by marketcap`);
-    
-    // Extract unique creator principals
-    const creatorSet = new Set<string>();
-    topTokens.forEach((token: Token) => {
-      if (token.creator && typeof token.creator === 'string') {
-        creatorSet.add(token.creator);
-      }
-    });
-    
-    const creatorPrincipals = Array.from(creatorSet);
-    console.log(`Found ${creatorPrincipals.length} unique creators from top tokens`);
-    
-    // Calculate performance for each creator with forceRefresh parameter
-    const performancePromises = creatorPrincipals.map(principal => {
-      // Log which creator is being processed with force refresh
-      if (forceRefresh) {
-        console.log(`Force refreshing creator data for ${principal}`)
-      }
-      return calculateCreatorPerformance(principal, forceRefresh)
-    });
-    
-    const performances = await Promise.all(performancePromises);
-    const validPerformances = performances.filter((perf): perf is CreatorPerformance => perf !== null);
-    
-    console.log(`Successfully calculated performance for ${validPerformances.length} creators`);
-    
-    // Cache the data
-    try {
-      await setInRedis(REDIS_CACHE_KEY, validPerformances, CACHE_EXPIRY_TIME / 1000);
-      console.log('Successfully cached creators data');
-    } catch (error) {
-      console.error('Failed to cache creators data:', error);
-    }
-    
-    // Sort and return the data
-    return sortCreatorsData(validPerformances, sortBy, limit);
+    return await refreshCreatorsCache(sortBy, limit);
   } catch (error) {
     console.error('Error finding top creators:', error);
     
@@ -700,6 +677,52 @@ export const findTopCreators = async (
     
     return [];
   }
+};
+
+// Helper function to refresh the creators cache
+const refreshCreatorsCache = async (
+  sortBy: CreatorSortOption = 'confidence',
+  limit = 200
+): Promise<CreatorPerformance[]> => {
+  console.log('Fetching creators data through topTokens');
+  
+  // We'll get top tokens first through the proxy
+  const topTokens = await getTopTokens(200);
+  console.log(`Fetched ${topTokens.length} top tokens by marketcap`);
+  
+  // Extract unique creator principals
+  const creatorSet = new Set<string>();
+  topTokens.forEach((token: Token) => {
+    if (token.creator && typeof token.creator === 'string') {
+      creatorSet.add(token.creator);
+    }
+  });
+  
+  const creatorPrincipals = Array.from(creatorSet);
+  console.log(`Found ${creatorPrincipals.length} unique creators from top tokens`);
+  
+  // Calculate performance for each creator
+  const performancePromises = creatorPrincipals.map(principal => 
+    calculateCreatorPerformance(principal, false)
+  );
+  
+  const performances = await Promise.all(performancePromises);
+  const validPerformances = performances.filter((perf): perf is CreatorPerformance => perf !== null);
+  
+  console.log(`Successfully calculated performance for ${validPerformances.length} creators`);
+  
+  // Cache the data
+  try {
+    // Store both the data and a timestamp
+    await setInRedis(REDIS_CACHE_KEY, validPerformances, CACHE_EXPIRY_TIME / 1000);
+    await setInRedis(`${REDIS_CACHE_KEY}_timestamp`, Date.now(), CACHE_EXPIRY_TIME / 1000);
+    console.log('Successfully cached creators data');
+  } catch (error) {
+    console.error('Failed to cache creators data:', error);
+  }
+  
+  // Sort and return the data
+  return sortCreatorsData(validPerformances, sortBy, limit);
 };
 
 // Helper function to sort creators data
@@ -851,23 +874,48 @@ export const getRecentlyLaunchedTokens = async (limit = 20): Promise<Token[]> =>
 // Fetch the 4 newest tokens with a short cache time (10 seconds)
 export const getNewestTokens = async (): Promise<Token[]> => {
   try {
+    // Check Redis cache first
+    const redisKey = 'newest_tokens';
+    const cachedTokens = await getFromRedis<Token[]>(redisKey);
+    
+    // If we have cached data that's less than 10 seconds old, use it
+    if (cachedTokens) {
+      console.log('Using cached newest tokens from Redis');
+      return cachedTokens.map((token: Token) => {
+        // Ensure token has price_in_sats and activity status
+        if (!token.price_in_sats) {
+          token.price_in_sats = convertPriceToSats(token.price);
+        }
+        if (token.is_active === undefined) {
+          isTokenActive(token);
+        }
+        return token;
+      });
+    }
+    
+    // If no cache or cache expired, fetch from proxy
     // Add a timestamp to bust any proxy caching
-    const timestamp = Date.now()
+    const timestamp = Date.now();
     // Use dedicated endpoint with very short cache time
     const response = await axios.get(`${PROXY_BASE_URL}/newest-tokens?_t=${timestamp}`);
     
     const tokens = response.data.data || [];
     
-    // Add price_in_sats and check activity status for each token
-    return tokens.map((token: Token) => {
+    // Process tokens and save to cache
+    const processedTokens = tokens.map((token: Token) => {
       token.price_in_sats = convertPriceToSats(token.price);
       isTokenActive(token);
       return token;
     });
+    
+    // Store in Redis with 10 second expiry
+    await setInRedis(redisKey, processedTokens, 10);
+    
+    return processedTokens;
   } catch (error) {
     console.error('Error fetching newest tokens:', error);
     
-    // Fallback to direct API call if proxy fails
+    // Fallback to direct API call if proxy fails and we have no cache
     try {
       const timestamp = Date.now()
       const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=4&_t=${timestamp}`);
@@ -888,8 +936,28 @@ export const getNewestTokens = async (): Promise<Token[]> => {
 // Fetch older recent tokens (5-30) with a longer cache time (1 minute)
 export const getOlderRecentTokens = async (limit = 26): Promise<Token[]> => {
   try {
+    // Check Redis cache first
+    const redisKey = `older_recent_tokens_${limit}`;
+    const cachedTokens = await getFromRedis<Token[]>(redisKey);
+    
+    // If we have cached data that's less than 60 seconds old, use it
+    if (cachedTokens) {
+      console.log('Using cached older recent tokens from Redis');
+      return cachedTokens.map((token: Token) => {
+        // Ensure token has price_in_sats and activity status
+        if (!token.price_in_sats) {
+          token.price_in_sats = convertPriceToSats(token.price);
+        }
+        if (token.is_active === undefined) {
+          isTokenActive(token);
+        }
+        return token;
+      });
+    }
+    
+    // If no cache or cache expired, fetch from proxy
     // Add a timestamp to bust any proxy caching
-    const timestamp = Date.now()
+    const timestamp = Date.now();
     // Use dedicated endpoint with longer cache time
     const response = await axios.get(`${PROXY_BASE_URL}/older-recent-tokens?_t=${timestamp}`, {
       params: { limit }
@@ -897,16 +965,21 @@ export const getOlderRecentTokens = async (limit = 26): Promise<Token[]> => {
     
     const tokens = response.data.data || [];
     
-    // Add price_in_sats and check activity status for each token
-    return tokens.map((token: Token) => {
+    // Process tokens and save to cache
+    const processedTokens = tokens.map((token: Token) => {
       token.price_in_sats = convertPriceToSats(token.price);
       isTokenActive(token);
       return token;
     });
+    
+    // Store in Redis with 60 second expiry
+    await setInRedis(redisKey, processedTokens, 60);
+    
+    return processedTokens;
   } catch (error) {
     console.error('Error fetching older recent tokens:', error);
     
-    // Fallback to direct API call if proxy fails
+    // Fallback to direct API call if proxy fails and we have no cache
     try {
       const timestamp = Date.now()
       const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=2&limit=${limit}&_t=${timestamp}`);

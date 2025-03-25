@@ -3733,6 +3733,7 @@ body {
   gap: 0.5rem;
   margin-top: 0.5rem;
   align-items: center;
+  min-height: 1.75rem; /* Ensure consistent height with or without icons */
 }
 
 .token-social-icon {
@@ -3744,6 +3745,12 @@ body {
   border-radius: 50%;
   background-color: var(--color-background);
   transition: all 0.2s ease;
+}
+
+.token-social-placeholder {
+  width: 1.75rem;
+  height: 1.75rem;
+  /* No background or border to make it invisible but maintain spacing */
 }
 
 .token-social-icon:hover {

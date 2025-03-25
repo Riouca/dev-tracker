@@ -31,6 +31,7 @@ export function Dashboard() {
     if (preloadedData && preloadedData.length > 0) {
       console.log('Using preloaded dashboard data')
       setCreators(preloadedData)
+      setDisplayedCreators(sortCreators(preloadedData, sortDirection, sortBy))
       setLoading(false)
       setLastUpdated(lastDashboardUpdate || new Date())
       
@@ -43,10 +44,12 @@ export function Dashboard() {
         silentlyLoadData()
       }
     } else {
-      // Aucune donnée préchargée, charger normalement
-      loadCreators(true)
+      // Si aucune donnée préchargée n'est disponible, commençons à charger
+      // avec un indicateur mais gardons loading=true pour montrer le loader
+      setLoading(true)
+      loadCreators()
     }
-  }, [])
+  }, [preloadedData])
 
   // Méthode pour charger silencieusement les données sans état de chargement
   const silentlyLoadData = async () => {
@@ -65,6 +68,7 @@ export function Dashboard() {
       
       // Mettre à jour l'état local
       setCreators(tempCreators)
+      setDisplayedCreators(sortCreators(tempCreators, sortDirection, sortBy))
       setLastUpdated(new Date())
       
       // Stocker le timestamp dans localStorage
@@ -94,7 +98,7 @@ export function Dashboard() {
   // Sort creators when sortBy, sortDirection, or creators change
   useEffect(() => {
     if (creators.length > 0) {
-      sortCreators(sortBy, sortDirection)
+      sortCreators(creators, sortDirection, sortBy)
     }
   }, [sortBy, sortDirection, creators])
 
@@ -135,38 +139,49 @@ export function Dashboard() {
     return () => clearInterval(timeDisplayInterval)
   }, [lastUpdated])
 
-  const loadCreators = async (forceRefresh = false) => {
+  // Charger les créateurs avec un affichage progressif
+  const loadCreators = async () => {
     try {
-      setLoading(true)
       setError(null)
       
-      // Toujours charger les créateurs triés par confiance
-      // Don't force refresh on normal user interactions, only on scheduled refresh
-      let tempCreators = await findTopCreators(100, 'confidence', forceRefresh)
+      // Commence à charger les créateurs par batches
+      const batchSize = 10 // Afficher les 10 premiers immédiatement
       
-      // Filter out creators with no username
-      tempCreators = tempCreators.filter(creator => creator.username)
+      // Première requête pour obtenir les créateurs rapidement
+      const initialCreators = await findTopCreators(batchSize, 'confidence')
       
-      // Mettre à jour le contexte global pour le préchargement
-      updateDashboardData(tempCreators)
-      
-      setCreators(tempCreators)
-      
-      // S'assurer que le tri est par défaut sur 'confidence' avec ordre descendant
-      setSortBy('confidence')
-      setSortDirection('desc')
-      
-      setLastUpdated(new Date())
-      // Store the timestamp in localStorage
-      localStorage.setItem('forseti_creators_cache_timestamp', Date.now().toString())
-      setLoading(false)
-      
-      // Initial filter and pagination
-      filterCreators(tempCreators)
-      updatePaginatedCreators()
-    } catch (error) {
-      console.error('Failed to load creators:', error)
-      setError('Failed to load data. Please try again later.')
+      if (initialCreators.length > 0) {
+        // Afficher immédiatement le premier lot
+        setCreators(initialCreators)
+        setDisplayedCreators(sortCreators(initialCreators, sortDirection, sortBy))
+        
+        // Montrer indicateur de chargement partiel
+        setLoading(false)
+        
+        // Continuer à charger le reste en arrière-plan
+        setTimeout(async () => {
+          try {
+            // Charge le reste des créateurs
+            const allCreators = await findTopCreators(100, 'confidence')
+            
+            // Mettre à jour avec l'ensemble complet
+            setCreators(allCreators)
+            setDisplayedCreators(sortCreators(allCreators, sortDirection, sortBy))
+          } catch (backgroundError) {
+            console.error('Error loading remaining creators:', backgroundError)
+            // Ne pas montrer d'erreur puisque nous avons déjà des données
+          }
+        }, 100) // Petit délai pour laisser l'UI respirer
+      } else {
+        // Pas de données, charger normalement
+        const allCreators = await findTopCreators(100, 'confidence')
+        setCreators(allCreators)
+        setDisplayedCreators(sortCreators(allCreators, sortDirection, sortBy))
+        setLoading(false)
+      }
+    } catch (err) {
+      console.error('Error loading creators:', err)
+      setError('Failed to load creators. Please try again later.')
       setLoading(false)
     }
   }
@@ -192,34 +207,35 @@ export function Dashboard() {
     return `${diffDays} days ago`
   }
 
-  const sortCreators = (sortOption: CreatorSortOption, direction: 'asc' | 'desc' = 'desc') => {
+  const sortCreators = (creators: CreatorPerformance[], direction: 'asc' | 'desc' = 'desc', sortOption: CreatorSortOption) => {
     let sortedCreators = [...creators]
     
-    const sortFn = (a: CreatorPerformance, b: CreatorPerformance): number => {
-      let result = 0;
+    sortedCreators.sort((a, b) => {
+      let result = 0
       
+      // Sort by the selected option
       switch (sortOption) {
-        case 'volume':
-          result = b.totalVolume - a.totalVolume
+        case 'tokens':
+          result = b.totalTokens - a.totalTokens
           break
         case 'active':
           result = b.activeTokens - a.activeTokens
+          break
+        case 'volume':
+          result = b.totalVolume - a.totalVolume
+          break
+        case 'success':
+          result = b.successRate - a.successRate
           break
         case 'weighted':
           result = b.weightedScore - a.weightedScore
           break
         case 'confidence':
           result = b.confidenceScore - a.confidenceScore
-          // If confidence scores are equal, sort by volume as secondary criterion
+          // If confidence scores are equal, sort by marketcap as secondary criterion
           if (result === 0) {
-            result = b.totalVolume - a.totalVolume
+            result = b.totalMarketcap - a.totalMarketcap
           }
-          break
-        case 'success':
-          result = b.successRate - a.successRate
-          break
-        case 'tokens':
-          result = b.totalTokens - a.totalTokens
           break
         case 'holders':
           const aHolders = a.totalHolders || 0
@@ -227,18 +243,18 @@ export function Dashboard() {
           result = bHolders - aHolders
           break
         default:
-          result = b.confidenceScore - a.confidenceScore
-          // If confidence scores are equal, sort by volume as secondary criterion
+          result = b.confidenceScore - a.confidenceScore // Default: confidence score
+          // If confidence scores are equal, sort by marketcap as secondary criterion
           if (result === 0) {
-            result = b.totalVolume - a.totalVolume
+            result = b.totalMarketcap - a.totalMarketcap
           }
       }
       
-      // Reverse the result if ascending order
+      // Reverse the result if ascending order is requested
       return direction === 'asc' ? -result : result
-    }
+    })
     
-    sortedCreators.sort(sortFn)
+    console.log(`Sorted ${sortedCreators.length} creators by ${sortOption} in ${direction} order`)
     
     // Update ranks after sorting
     sortedCreators = sortedCreators.map((creator, index) => ({
@@ -246,10 +262,10 @@ export function Dashboard() {
       rank: index + 1
     }))
     
-    console.log(`Sorted ${sortedCreators.length} creators by ${sortOption} in ${direction} order`)
-    
     // Filter based on search
     filterCreators(sortedCreators)
+    
+    return sortedCreators
   }
 
   const filterCreators = (sortedCreators = creators) => {

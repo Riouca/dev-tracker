@@ -75,10 +75,18 @@ function App() {
       } catch (error) {
         console.error('Background dashboard data loading failed:', error)
       }
+    } else {
+      console.log('Dashboard data is still fresh, skipping update')
     }
   }
   
   const loadRecentTokens = async () => {
+    // Check if current data is still fresh (less than 9 seconds old)
+    if (lastRecentUpdate && (new Date().getTime() - lastRecentUpdate.getTime() < 9000)) {
+      console.log('Recent tokens data is still fresh, skipping update')
+      return
+    }
+    
     try {
       console.log('Background loading newest tokens...')
       const data = await getNewestTokens()
@@ -92,6 +100,12 @@ function App() {
   }
   
   const loadOlderTokens = async () => {
+    // Check if current data is still fresh (less than 59 seconds old)
+    if (lastOlderUpdate && (new Date().getTime() - lastOlderUpdate.getTime() < 59000)) {
+      console.log('Older tokens data is still fresh, skipping update')
+      return
+    }
+    
     try {
       console.log('Background loading older tokens...')
       const data = await getOlderRecentTokens()
