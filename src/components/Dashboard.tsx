@@ -87,7 +87,7 @@ export function Dashboard() {
       
       // Toujours charger les créateurs triés par confiance
       // Don't force refresh on normal user interactions, only on scheduled refresh
-      let tempCreators = await findTopCreators(200, 'confidence', forceRefresh);
+      let tempCreators = await findTopCreators(100, 'confidence', forceRefresh);
       
       // Filter out creators with no username
       tempCreators = tempCreators.filter(creator => creator.username);
@@ -359,7 +359,7 @@ export function Dashboard() {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>Developer Leaderboard</h1>
+        <h1>Top 100 Developers</h1>
         <p className="dashboard-description">
           Track the most successful token creators on Odin.fun with our confidence score system
         </p>

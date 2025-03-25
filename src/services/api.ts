@@ -154,13 +154,7 @@ export const convertMarketcapToBTC = (marketcap: number): number => {
 
 // Get current BTC price in USD
 export const getBTCPrice = async (): Promise<number> => {
-  try {
-    const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
-    return response.data.bitcoin.usd;
-  } catch (error) {
-    console.error('Error fetching BTC price:', error);
-    return 85000; // Fallback price if API fails
-  }
+  return 88888; // Hardcoded value instead of API call
 };
 
 // Convert BTC volume to USD
@@ -176,7 +170,7 @@ export const formatVolume = (volume: number, inUSD = false): string => {
   
   if (inUSD) {
     // For USD display
-    const usdValue = btcVolume * 84000; // Use fallback BTC price
+    const usdValue = btcVolume * 88888; // Fixed BTC price
     
     if (usdValue >= 1000000) {
       return `$${(usdValue / 1000000).toFixed(1)}M`;
@@ -206,7 +200,7 @@ export const formatMarketcap = (marketcap: number, inUSD = false): string => {
   
   if (inUSD) {
     // For USD display
-    const usdValue = btcMarketcap * 84000; // Use fallback BTC price
+    const usdValue = btcMarketcap * 88888; // Fixed BTC price
     
     if (usdValue >= 1000000) {
       return `$${(usdValue / 1000000).toFixed(1)}M`;
@@ -453,7 +447,7 @@ export const calculateCreatorPerformance = async (
     
     // Base marketcap per token (0.025 BTC)
     const baseBtcMarketcapPerToken = 0.025;
-    const defaultBtcPrice = 85000; // Default BTC price in USD
+    const defaultBtcPrice = 88888; // Default BTC price in USD
     const btcPrice = await getBTCPrice() || defaultBtcPrice;
     
     tokens.forEach(token => {
@@ -545,18 +539,6 @@ export const calculateCreatorPerformance = async (
         // Start at 3 points for 0/1 and decrease by 0.5 per token
         successScore = Math.max(0.5, 3 - (tokens.length * 0.5));
       }
-      
-      // Log detailed success score calculation for debugging
-      console.log(`Success score calculation for ${user.username}:`, {
-        tokens: tokens.length,
-        activeTokens,
-        inactiveTokens,
-        baseSuccessRate,
-        activeBonus,
-        inactivePenalty,
-        netEffect,
-        finalSuccessScore: successScore
-      });
     }
     
     // Calculate weighted confidence score based on various metrics
@@ -567,23 +549,6 @@ export const calculateCreatorPerformance = async (
       (tradesScore * tradesWeight) +
       (mcapScore * mcapWeight)
     ));
-    
-    // Add detailed logging for score calculation
-    console.log(`DETAILED CONFIDENCE CALCULATION for ${user.username}:`, {
-      successComponent: (successScore * successWeight).toFixed(2),
-      volumeComponent: (volumeScore * volumeWeight).toFixed(2),
-      holdersComponent: (holdersScore * holdersWeight).toFixed(2),
-      tradesComponent: (tradesScore * tradesWeight).toFixed(2),
-      mcapComponent: (mcapScore * mcapWeight).toFixed(2),
-      rawComponents: {
-        successScore: successScore.toFixed(2),
-        volumeScore: volumeScore.toFixed(2),
-        holdersScore: holdersScore.toFixed(2),
-        tradesScore: tradesScore.toFixed(2),
-        mcapScore: mcapScore.toFixed(2),
-      },
-      totalScore: confidenceScore.toFixed(2)
-    });
     
     // Find the most recently created token
     const sortedByCreationTime = [...tokens].sort((a, b) => 
@@ -668,7 +633,7 @@ const retryApiCall = async <T>(
 
 // Find top creators based on their token performance
 export const findTopCreators = async (
-  limit = 200, 
+  limit = 100, 
   sortBy: CreatorSortOption = 'confidence',
   forceRefresh = false
 ): Promise<CreatorPerformance[]> => {
@@ -689,7 +654,7 @@ export const findTopCreators = async (
     console.log('Fetching creators data through topTokens');
     
     // We'll get top tokens first through the proxy
-    const topTokens = await getTopTokens(200);
+    const topTokens = await getTopTokens(125);
     console.log(`Fetched ${topTokens.length} top tokens by marketcap`);
     
     // Extract unique creator principals
