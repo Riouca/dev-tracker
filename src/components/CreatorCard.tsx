@@ -27,8 +27,6 @@ function getRankMedal(rank: number | undefined): string {
   return '';
 }
 
-
-
 function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFollowed, setIsFollowed] = useState(false);
@@ -38,18 +36,13 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
   useEffect(() => {
     // Fetch BTC price in USD
     const fetchBTCPrice = async () => {
-      try {
-        // Use provided btcPrice prop if available, otherwise fetch it
-        if (btcPrice) {
-          setUsdPrice(btcPrice);
-        } else {
-          const price = await getBTCPrice();
-          setUsdPrice(price);
-        }
-      } catch (error) {
-        console.error('Error fetching BTC price:', error);
-        // Fallback to a reasonable default
-        setUsdPrice(85000);
+      // Use provided btcPrice prop if available, otherwise fetch it
+      if (btcPrice) {
+        setUsdPrice(btcPrice);
+      } else {
+        // getBTCPrice now returns a fixed value without errors
+        const price = await getBTCPrice();
+        setUsdPrice(price);
       }
     };
     
@@ -275,8 +268,6 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
     }
   };
 
-
-
   // Get rarity level based on confidence score
   function getRarityLevel(score: number): string {
     if (score >= 100) return 'legendary';   // Gold - only perfect 100%
@@ -288,8 +279,6 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
     if (score >= 30) return 'scam';         // Brown
     return 'scam';                          // Red
   }
-
-
 
   return (
     <div className={`creator-card ${isExpanded ? 'expanded' : ''}`}>

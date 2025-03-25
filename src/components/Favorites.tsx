@@ -71,12 +71,9 @@ export function Favorites() {
   // Get BTC price for USD conversion
   useEffect(() => {
     const fetchBTCPrice = async () => {
-      try {
-        const price = await getBTCPrice()
-        setUsdPrice(price)
-      } catch (error) {
-        console.error('Error fetching BTC price:', error)
-      }
+      // getBTCPrice now returns a fixed value without errors
+      const price = await getBTCPrice()
+      setUsdPrice(price)
     }
     
     fetchBTCPrice()

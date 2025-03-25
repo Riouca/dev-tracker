@@ -65,7 +65,7 @@ export function RecentTokens() {
     // Setup interval for periodic refresh
     const intervalId = setInterval(() => {
       silentlyRefreshTokens()
-    }, 60000) // Refresh every minute
+    }, 10000) // Refresh every 10 seconds instead of 60 seconds
     
     // Cleanup
     return () => clearInterval(intervalId)
@@ -138,16 +138,16 @@ export function RecentTokens() {
       setSilentlyUpdating(true)
       console.log('Silently refreshing token data...')
       
-      // Fetch newest tokens first (refreshed every 20 seconds)
+      // Fetch newest tokens first (refreshed every 10 seconds)
       const newestTokens = await getNewestTokens()
       
       // Update context
       updateRecentTokens(newestTokens)
       
-      // Fetch older recent tokens (refreshed every 5 minutes)
-      // Only refetch if data is stale (older than 4 minutes)
+      // Fetch older recent tokens (refreshed every minute)
+      // Only refetch if data is stale (older than 55 seconds)
       let olderTokens = preloadedOlderTokens
-      if (!lastOlderUpdate || (new Date().getTime() - lastOlderUpdate.getTime() > 4 * 60 * 1000)) {
+      if (!lastOlderUpdate || (new Date().getTime() - lastOlderUpdate.getTime() > 55 * 1000)) {
         olderTokens = await getOlderRecentTokens()
         updateOlderTokens(olderTokens)
       }
@@ -164,12 +164,25 @@ export function RecentTokens() {
       // Process tokens and fetch creator data
       const tokensWithCreators: TokenWithCreator[] = []
       
-      // Fetch creator performance for each token - use false to avoid excessive API calls
+      // Fetch token holder data for more accurate metrics
       for (const token of allRecentTokens) {
         try {
-          const creatorPerformance = await calculateCreatorPerformance(token.creator, false)
+          // Force refresh creator data to ensure metrics are current
+          const creatorPerformance = await calculateCreatorPerformance(token.creator, true)
+          
+          // Get fresh holder data
+          const holderData = await getTokenHolderData(token.id)
+          
+          // Update token with latest holder data
+          const updatedToken = {
+            ...token,
+            holder_count: holderData.holder_count,
+            holder_top: holderData.holder_top,
+            holder_dev: holderData.holder_dev
+          }
+          
           tokensWithCreators.push({
-            token: token,
+            token: updatedToken,
             creator: creatorPerformance
           })
         } catch (err) {
@@ -521,12 +534,9 @@ export function RecentTokens() {
   // Fetch BTC price for USD conversion
   useEffect(() => {
     const fetchBTCPrice = async () => {
-      try {
-        const price = await getBTCPrice()
-        setUsdPrice(price)
-      } catch (err) {
-        console.error('Error fetching BTC price:', err)
-      }
+      // getBTCPrice now returns a fixed value without errors
+      const price = await getBTCPrice()
+      setUsdPrice(price)
     }
     fetchBTCPrice()
   }, [])

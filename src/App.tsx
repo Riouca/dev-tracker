@@ -52,8 +52,8 @@ function App() {
     
     // Setup background refresh intervals
     const dashboardInterval = setInterval(() => loadDashboardData(false), 20 * 60 * 1000) // 20 minutes
-    const recentTokensInterval = setInterval(() => loadRecentTokens(), 20 * 1000) // 20 seconds
-    const olderTokensInterval = setInterval(() => loadOlderTokens(), 5 * 60 * 1000) // 5 minutes
+    const recentTokensInterval = setInterval(() => loadRecentTokens(), 10 * 1000) // 10 seconds
+    const olderTokensInterval = setInterval(() => loadOlderTokens(), 60 * 1000) // 1 minute
     
     return () => {
       clearInterval(dashboardInterval)

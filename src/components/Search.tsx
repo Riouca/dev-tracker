@@ -22,13 +22,9 @@ function Search() {
   // Fetch BTC price on component mount
   useEffect(() => {
     const fetchBtcPrice = async () => {
-      try {
-        const price = await getBTCPrice()
-        setBtcPrice(price)
-      } catch (err) {
-        console.error('Error fetching BTC price:', err)
-        setBtcPrice(82000) // Fallback price
-      }
+      // getBTCPrice now returns a fixed value without errors
+      const price = await getBTCPrice()
+      setBtcPrice(price)
     }
     
     fetchBtcPrice()

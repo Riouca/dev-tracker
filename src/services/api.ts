@@ -154,13 +154,14 @@ export const convertMarketcapToBTC = (marketcap: number): number => {
 
 // Get current BTC price in USD
 export const getBTCPrice = async (): Promise<number> => {
-  return 88888; // Hardcoded value instead of API call
+  // Return a fixed value instead of calling an external API
+  return 88888;
 };
 
 // Convert BTC volume to USD
 export const convertBTCToUSD = async (btcAmount: number): Promise<number> => {
   const btcPrice = await getBTCPrice();
-  return btcAmount * btcPrice;
+  return btcAmount * (btcPrice || 88888); // Use 88888 as fallback
 };
 
 // Format volume for display
@@ -170,7 +171,7 @@ export const formatVolume = (volume: number, inUSD = false): string => {
   
   if (inUSD) {
     // For USD display
-    const usdValue = btcVolume * 88888; // Fixed BTC price
+    const usdValue = btcVolume * 88888; // Use fallback BTC price
     
     if (usdValue >= 1000000) {
       return `$${(usdValue / 1000000).toFixed(1)}M`;
@@ -200,7 +201,7 @@ export const formatMarketcap = (marketcap: number, inUSD = false): string => {
   
   if (inUSD) {
     // For USD display
-    const usdValue = btcMarketcap * 88888; // Fixed BTC price
+    const usdValue = btcMarketcap * 88888; // Use fallback BTC price
     
     if (usdValue >= 1000000) {
       return `$${(usdValue / 1000000).toFixed(1)}M`;
@@ -432,13 +433,6 @@ export const calculateCreatorPerformance = async (
       return null;
     }
     
-    // Debug price values
-    console.log('Token prices for creator:', principal);
-    tokens.forEach(token => {
-      const priceInSats = token.price_in_sats || token.price / 1000;
-      console.log(`Token ${token.name} (${token.id}): raw price = ${token.price}, in sats = ${priceInSats.toFixed(3)}, active = ${token.is_active}`);
-    });
-    
     let totalVolume = 0;
     let activeTokens = 0;
     let totalHolders = 0;
@@ -633,7 +627,7 @@ const retryApiCall = async <T>(
 
 // Find top creators based on their token performance
 export const findTopCreators = async (
-  limit = 100, 
+  limit = 200, 
   sortBy: CreatorSortOption = 'confidence',
   forceRefresh = false
 ): Promise<CreatorPerformance[]> => {
@@ -654,7 +648,7 @@ export const findTopCreators = async (
     console.log('Fetching creators data through topTokens');
     
     // We'll get top tokens first through the proxy
-    const topTokens = await getTopTokens(125);
+    const topTokens = await getTopTokens(200);
     console.log(`Fetched ${topTokens.length} top tokens by marketcap`);
     
     // Extract unique creator principals
@@ -846,11 +840,13 @@ export const getRecentlyLaunchedTokens = async (limit = 20): Promise<Token[]> =>
   }
 };
 
-// Fetch the 4 newest tokens with a short cache time (20 seconds)
+// Fetch the 4 newest tokens with a short cache time (10 seconds)
 export const getNewestTokens = async (): Promise<Token[]> => {
   try {
+    // Add a timestamp to bust any proxy caching
+    const timestamp = Date.now()
     // Use dedicated endpoint with very short cache time
-    const response = await axios.get(`${PROXY_BASE_URL}/newest-tokens`);
+    const response = await axios.get(`${PROXY_BASE_URL}/newest-tokens?_t=${timestamp}`);
     
     const tokens = response.data.data || [];
     
@@ -865,7 +861,8 @@ export const getNewestTokens = async (): Promise<Token[]> => {
     
     // Fallback to direct API call if proxy fails
     try {
-      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=4`);
+      const timestamp = Date.now()
+      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=4&_t=${timestamp}`);
       const tokens = response.data.data || [];
       
       return tokens.map((token: Token) => {
@@ -880,11 +877,13 @@ export const getNewestTokens = async (): Promise<Token[]> => {
   }
 };
 
-// Fetch older recent tokens (5-30) with a longer cache time (5 minutes)
+// Fetch older recent tokens (5-30) with a longer cache time (1 minute)
 export const getOlderRecentTokens = async (limit = 26): Promise<Token[]> => {
   try {
+    // Add a timestamp to bust any proxy caching
+    const timestamp = Date.now()
     // Use dedicated endpoint with longer cache time
-    const response = await axios.get(`${PROXY_BASE_URL}/older-recent-tokens`, {
+    const response = await axios.get(`${PROXY_BASE_URL}/older-recent-tokens?_t=${timestamp}`, {
       params: { limit }
     });
     
@@ -901,7 +900,8 @@ export const getOlderRecentTokens = async (limit = 26): Promise<Token[]> => {
     
     // Fallback to direct API call if proxy fails
     try {
-      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=2&limit=${limit}`);
+      const timestamp = Date.now()
+      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=2&limit=${limit}&_t=${timestamp}`);
       const tokens = response.data.data || [];
       
       return tokens.map((token: Token) => {
@@ -923,8 +923,10 @@ export const getTokenHolderData = async (tokenId: string): Promise<{
   holder_dev: number 
 }> => {
   try {
+    // Add timestamp to bust any proxy caching
+    const timestamp = Date.now()
     // Use dedicated endpoint with short cache time
-    const response = await axios.get(`${PROXY_BASE_URL}/token/${tokenId}/holders`);
+    const response = await axios.get(`${PROXY_BASE_URL}/token/${tokenId}/holders?_t=${timestamp}`);
     return response.data;
   } catch (error) {
     console.error(`Error fetching token holder data for ${tokenId}:`, error);
