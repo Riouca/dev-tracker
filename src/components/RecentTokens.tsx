@@ -7,7 +7,7 @@ import {
   getBTCPrice,
   getRarityLevel,
 } from '../services/api'
-import { formatPrice, formatNumber, getTimeSince, formatDeveloperHoldings } from '../utils/formatters'
+import { formatNumber, getTimeSince, formatDeveloperHoldings } from '../utils/formatters'
 import { useRecentTokensRedux } from '../hooks/useRecentTokensRedux'
 
 export function RecentTokens() {

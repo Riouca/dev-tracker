@@ -141,13 +141,14 @@ body {
 .nav-link::after {
   content: '';
   position: absolute;
-  bottom: -2px; /* Moved closer to text (from -3px) */
+  bottom: -5px; /* Lower position (was -3px) */
   left: 0;
   width: 0;
   height: 2px;
-  background: linear-gradient(90deg, var(--color-accent), transparent); /* Gradient underline */
+  background: linear-gradient(90deg, var(--color-accent) 50%, transparent);
   border-radius: 1px;
-  transition: width 0.2s ease-in-out; /* Faster transition */
+  transition: width 0.2s ease;
+  opacity: 0.7; /* Increased transparency */
 }
 
 .nav-link:hover::after {
@@ -163,12 +164,13 @@ body {
 .nav-link.active::after {
   content: '';
   position: absolute;
-  bottom: -3px; /* Match the hover underline position */
+  bottom: -5px; /* Match the hover underline position (was -3px) */
   left: 0;
   width: 100%;
   height: 2px;
   background: linear-gradient(90deg, var(--color-accent) 70%, transparent); /* Longer gradient for active */
   border-radius: 1px;
+  opacity: 0.7; /* Increased transparency */
 }
 
 .nav-link.external {
@@ -2054,7 +2056,7 @@ h1 {
   position: relative;
   width: 450px;
   max-width: 650px;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0; /* Removed margin-bottom (was 1.5rem) */
 }
 
 .search-input {

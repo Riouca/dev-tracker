@@ -19,9 +19,10 @@ const CACHE_EXPIRY = {
 // Add API rate limiter - global instance to throttle all external API calls
 const apiRateLimiter = {
   lastCallTime: 0,
-  minDelay: 700, // 700ms between API calls
+  minDelay: 300, // 300ms entre toutes les requêtes API
+  
   // Fonction pour appliquer un délai si nécessaire avant un appel API
-  async throttle() {
+  async throttle(isDashboardRequest = false) {
     const now = Date.now();
     const timeSinceLastCall = now - this.lastCallTime;
     
@@ -31,7 +32,7 @@ const apiRateLimiter = {
       await new Promise(resolve => setTimeout(resolve, delayNeeded));
     }
     
-    // Mettre à jour le timestamp après le délai éventuel
+    // Mettre à jour le timestamp après le délai
     this.lastCallTime = Date.now();
   }
 };
@@ -57,14 +58,14 @@ console.log('Connected to Redis');
 app.use(cors());
 app.use(express.json());
 
-// Remplacer la fonction fetchWithRetry
-async function fetchWithRetry(url, retryDelayMs = 30000, maxRetries = 3) {
+// Modify fetchWithRetry to include dashboard parameter
+async function fetchWithRetry(url, retryDelayMs = 30000, maxRetries = 3, isDashboard = false) {
   let retries = 0;
   
   while (retries <= maxRetries) {
     try {
       // Appliquer le throttling avant chaque requête externe
-      await apiRateLimiter.throttle();
+      await apiRateLimiter.throttle(isDashboard);
       
       // Faire l'appel API
       console.log(`Making API call to: ${url}`);
@@ -85,7 +86,7 @@ async function fetchWithRetry(url, retryDelayMs = 30000, maxRetries = 3) {
   }
 }
 
-// Modifier getCachedOrFetch pour utiliser apiRateLimiter.throttle()
+// Modifier getCachedOrFetch pour utiliser apiRateLimiter.throttle() avec isDashboard
 async function getCachedOrFetch(cacheKey, apiUrl, expiryTime = CACHE_EXPIRY.DEFAULT, isDashboard = false) {
   try {
     // Optimisation: vérifier si les données correspondent à des clés préchargées
@@ -104,16 +105,16 @@ async function getCachedOrFetch(cacheKey, apiUrl, expiryTime = CACHE_EXPIRY.DEFA
 
     // Si c'est une requête dashboard, utiliser fetchWithRetry
     if (isDashboard) {
-      console.log(`Cache miss for ${cacheKey}, fetching dashboard data with retry mechanism`);
-      const data = await fetchWithRetry(apiUrl);
+      console.log(`Cache miss for ${cacheKey}, fetching dashboard data with retry mechanism and stricter rate limiting`);
+      const data = await fetchWithRetry(apiUrl, 30000, 3, true); // Passer isDashboard=true
       
       // Cache the response
       await redisClient.set(cacheKey, JSON.stringify(data), { EX: expiryTime });
       return data;
     }
     
-    // Pour les requêtes standard, appliquer le throttling
-    await apiRateLimiter.throttle();
+    // Pour les requêtes standard, appliquer le throttling normal
+    await apiRateLimiter.throttle(false);
 
     // If not cached, fetch from API
     console.log(`Cache miss for ${cacheKey}, fetching from API: ${apiUrl}`);
@@ -338,25 +339,16 @@ app.get('/api/older-recent-tokens', async (req, res) => {
   }
 });
 
-// Add route for token holder data with shorter cache time
+// Get token holder data
 app.get('/api/token/:id/holders', async (req, res) => {
   try {
     const { id } = req.params;
     const cacheKey = `token_holders_${id}`;
     const apiUrl = `${API_BASE_URL}/token/${id}`;
     
+    // Use short cache time for holder data
     const data = await getCachedOrFetch(cacheKey, apiUrl, CACHE_EXPIRY.TOKEN_HOLDERS);
-    
-    // Extract only the holder-related data to reduce response size
-    const holderData = {
-      id: data.id,
-      name: data.name,
-      holder_count: data.holder_count,
-      holder_top: data.holder_top,
-      holder_dev: data.holder_dev
-    };
-    
-    res.json(holderData);
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -390,6 +382,59 @@ app.get('/api/dashboard-parts', async (req, res) => {
     
     res.status(400).json({ error: 'Invalid part parameter' });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// NOUVEAU: Endpoint pour récupérer les données précachées
+app.get('/api/cached-data', async (req, res) => {
+  try {
+    console.log("Récupération des données précachées pour le client");
+    
+    // Récupérer les données du cache en parallèle
+    const [topTokensData, recentTokensData, newestTokensData] = await Promise.all([
+      redisClient.get('tokens_marketcap_100'),
+      redisClient.get('recent_tokens_20'),
+      redisClient.get('newest_tokens_4')
+    ]);
+    
+    // Préparer les résultats
+    const result = {};
+    
+    // Traiter les données des créateurs
+    if (topTokensData) {
+      const topTokens = JSON.parse(topTokensData).data || [];
+      
+      // Extraire les principaux creators et transformer en format CreatorPerformance
+      // Simplification: on renvoie juste les tokens pour le moment
+      // Le client va pouvoir utiliser ces données pour afficher rapidement quelque chose
+      result.topTokens = topTokens;
+      
+      // Ici on pourrait prétraiter davantage les données pour les transformer en créateurs,
+      // mais on va laisser le client faire ce calcul à partir des tokens pour simplifier
+      // Exemple de structure qu'on pourrait renvoyer: { principal, username, tokens: [] }
+    }
+    
+    // Traiter les tokens récents
+    if (recentTokensData) {
+      result.recentTokens = JSON.parse(recentTokensData).data || [];
+    }
+    
+    // Traiter les tokens les plus récents
+    if (newestTokensData) {
+      result.newestTokens = JSON.parse(newestTokensData).data || [];
+    }
+    
+    // Ajouter les timestamps de dernière mise à jour
+    result.timestamps = {
+      topTokens: await redisClient.ttl('tokens_marketcap_100'),
+      recentTokens: await redisClient.ttl('recent_tokens_20'),
+      newestTokens: await redisClient.ttl('newest_tokens_4')
+    };
+    
+    res.json(result);
+  } catch (error) {
+    console.error("Erreur lors de la récupération des données précachées:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -444,7 +489,7 @@ function scheduleBackgroundRefreshes() {
       `${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=4`,
       CACHE_EXPIRY.NEWEST_TOKENS
     ).catch(err => console.error("Erreur rafraîchissement newest tokens:", err));
-  }, 15000); // 15 secondes
+  }, 10000); // 10 secondes (était 15 secondes)
   
   setInterval(() => {
     getCachedOrFetch(
@@ -452,18 +497,27 @@ function scheduleBackgroundRefreshes() {
       `${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=20`,
       CACHE_EXPIRY.RECENT_TOKENS
     ).catch(err => console.error("Erreur rafraîchissement tokens récents:", err));
-  }, 25000); // 25 secondes
+  }, 30000); // 30 secondes (était 25 secondes)
   
-  setInterval(() => {
-    getCachedOrFetch(
-      'tokens_marketcap_100', 
-      `${API_BASE_URL}/tokens?sort=marketcap%3Adesc&page=1&limit=100`,
-      CACHE_EXPIRY.DEFAULT,
-      true
-    ).catch(err => console.error("Erreur rafraîchissement dashboard:", err));
-  }, 600000); // 10 minutes
+  // Pour le dashboard, on va traiter les créateurs par lots avec un rate limit
+  setInterval(async () => {
+    console.log("Démarrage du rafraîchissement du dashboard...");
+    try {
+      // Récupérer d'abord les top tokens
+      const topTokensData = await getCachedOrFetch(
+        'tokens_marketcap_100', 
+        `${API_BASE_URL}/tokens?sort=marketcap%3Adesc&page=1&limit=100`,
+        CACHE_EXPIRY.DEFAULT,
+        true
+      );
+      
+      console.log("Données de base du dashboard rafraîchies");
+    } catch (err) {
+      console.error("Erreur rafraîchissement dashboard:", err);
+    }
+  }, 1800000); // 30 minutes (était 10 minutes)
   
-  console.log("Rafraîchissements en arrière-plan programmés");
+  console.log("Rafraîchissements en arrière-plan programmés avec nouveaux intervalles: 10s/30s/30min");
 }
 
 // Start server

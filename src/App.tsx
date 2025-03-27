@@ -1,17 +1,16 @@
-import { useState, createContext } from 'react'
+import { useState, createContext, useEffect } from 'react'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import { Dashboard } from './components/Dashboard'
 import { RecentTokens } from './components/RecentTokens'
 import { Favorites } from './components/Favorites'
 import Search from './components/Search'
-import { Token, CreatorPerformance } from './services/api'
+import { Token, CreatorPerformance, processTokensIntoCreators, processTokens } from './services/api'
 import './App.css'
 import {
   QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
 // Type for page navigation - match Header component
 type Page = 'dashboard' | 'recent' | 'search' | 'favorites'
@@ -55,6 +54,20 @@ const queryClient = new QueryClient({
   },
 })
 
+// Fonction pour récupérer les données précachées du serveur Redis
+async function fetchCachedData() {
+  try {
+    const response = await fetch('http://localhost:4000/api/cached-data');
+    if (!response.ok) {
+      throw new Error('Failed to fetch cached data');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching cached data:', error);
+    return null;
+  }
+}
+
 function App() {
   // State for current page
   const [currentPage, setCurrentPage] = useState<Page>('dashboard')
@@ -66,6 +79,48 @@ function App() {
   const [lastDashboardUpdate, setLastDashboardUpdate] = useState<Date | null>(null)
   const [lastRecentUpdate, setLastRecentUpdate] = useState<Date | null>(null)
   const [lastOlderUpdate, setLastOlderUpdate] = useState<Date | null>(null)
+  
+  // Charger les données précachées au lancement de l'application
+  useEffect(() => {
+    async function loadCachedData() {
+      const cachedData = await fetchCachedData();
+      
+      if (cachedData) {
+        // Traitement des tokens pour obtenir les créateurs
+        if (cachedData.topTokens && cachedData.topTokens.length > 0) {
+          try {
+            // D'abord traiter les tokens pour ajouter le prix en sats et l'état d'activité
+            const processedTokens = processTokens(cachedData.topTokens);
+            
+            // Ensuite, conversion des tokens en créateurs
+            const topCreators = await processTokensIntoCreators(processedTokens);
+            if (topCreators.length > 0) {
+              updateDashboardData(topCreators);
+              console.log('Processed and loaded cached top creators:', topCreators.length, 'creators');
+            }
+          } catch (error) {
+            console.error('Error processing top tokens into creators:', error);
+          }
+        }
+        
+        if (cachedData.newestTokens && cachedData.newestTokens.length > 0) {
+          // Traiter les tokens pour ajouter le prix en sats et l'état d'activité
+          const processedTokens = processTokens(cachedData.newestTokens);
+          updateRecentTokens(processedTokens);
+          console.log('Loaded cached newest tokens:', processedTokens.length, 'tokens');
+        }
+        
+        if (cachedData.recentTokens && cachedData.recentTokens.length > 0) {
+          // Traiter les tokens pour ajouter le prix en sats et l'état d'activité
+          const processedTokens = processTokens(cachedData.recentTokens);
+          updateOlderTokens(processedTokens);
+          console.log('Loaded cached recent tokens:', processedTokens.length, 'tokens');
+        }
+      }
+    }
+    
+    loadCachedData();
+  }, []);
   
   // Update functions with timestamp updates
   const updateDashboardData = (data: CreatorPerformance[]) => {
@@ -127,8 +182,6 @@ function App() {
           <Footer />
         </div>
       </PreloadContext.Provider>
-      
-      {process.env.NODE_ENV === 'development' && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>
   )
 }

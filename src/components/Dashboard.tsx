@@ -15,7 +15,12 @@ export function Dashboard() {
   // volume, and active tokens count for an overall developer assessment
   const [sortBy, setSortBy] = useState<CreatorSortOption>('confidence')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  // Set a fixed timestamp 3 minutes in the past instead of null
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(() => {
+    const date = new Date();
+    date.setMinutes(date.getMinutes() - 3);
+    return date;
+  })
   const [displayTime, setDisplayTime] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
   

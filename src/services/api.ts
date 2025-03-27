@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Use the proxy server
-const PROXY_BASE_URL = 'http://localhost:4000/api';
+// Use the proxy server - use relative URL instead of hardcoding localhost for production
+const PROXY_BASE_URL = '/api';
 const API_BASE_URL = 'https://api.odin.fun/v1';
 
 export interface Token {
@@ -217,58 +217,47 @@ export const formatMarketcap = (marketcap: number, inUSD = false): string => {
   }
 };
 
-// Check if a token is active based on price and last activity
+// Determine if a token is active based on price and other factors
 export const isTokenActive = (token: Token): boolean => {
-  // Calculate price in sats if not already done
-  if (!token.price_in_sats) {
-    token.price_in_sats = convertPriceToSats(token.price);
+  // Set is_active property
+  if (token.price <= 0 || !token.trading) {
+    token.is_active = false;
+    token.inactive_reason = token.price <= 0 
+      ? 'Zero price' 
+      : 'Trading disabled';
+    return false;
   }
   
-  // Calculate price change percentage if price_1d is available
-  if (token.price_1d && token.price_1d > 0) {
-    const currentPrice = token.price;
-    const previousPrice = token.price_1d;
-    token.price_change_24h = ((currentPrice - previousPrice) / previousPrice) * 100;
-  } else {
-    token.price_change_24h = 0;
-  }
-  
-  const priceInSats = token.price_in_sats;
+  // Calculate days since creation
+  const createdDate = new Date(token.created_time);
   const now = new Date();
-  const tokenCreationDate = new Date(token.created_time);
-  const lastActionDate = new Date(token.last_action_time);
+  const daysSinceCreation = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
   
-  // Check if token is older than 15 minutes
-  const isOlderThan15Min = now.getTime() - tokenCreationDate.getTime() > 15 * 60 * 1000;
-  
-  // Check if token had no transactions in the last 3 days
-  const threeDaysAgo = new Date();
-  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-  const noRecentActivity = lastActionDate < threeDaysAgo;
-  
-  // New inactive rules:
-  // 1. Price under 0.2 sats and older than 15 minutes
-  // 2. Price under 0.4 sats, older than 15 minutes, and no transactions in 3 days
-  let isActive = true;
-  let inactiveReason = '';
-  
-  // Rule 1: Token under 0.2 sats and older than 15 minutes
-  if (priceInSats < 0.2 && isOlderThan15Min) {
-    isActive = false;
-    inactiveReason = 'Low price (< 0.2 sats)';
+  // Check if token has some trading activity based on days since creation
+  if (daysSinceCreation > 2 && token.volume < 0.00001) {
+    token.is_active = false;
+    token.inactive_reason = 'No trading activity';
+    return false;
   }
   
-  // Rule 2: Token under 0.4 sats, older than 15 minutes, and no activity in 3 days
-  if (priceInSats < 0.4 && isOlderThan15Min && noRecentActivity) {
-    isActive = false;
-    inactiveReason = inactiveReason ? `${inactiveReason} & No recent activity` : 'Low price (< 0.4 sats) & No recent activity';
-  }
-  
-  // Update token with activity status
-  token.is_active = isActive;
-  token.inactive_reason = isActive ? '' : inactiveReason;
-  
-  return isActive;
+  // Token is active if it passed all checks
+  token.is_active = true;
+  return true;
+};
+
+// Process tokens by adding sats price and activity status
+export const processTokens = (tokens: Token[]): Token[] => {
+  return tokens.map(token => {
+    // Add price in sats if not already present
+    if (typeof token.price === 'number' && token.price_in_sats === undefined) {
+      token.price_in_sats = convertPriceToSats(token.price);
+    }
+    
+    // Check token activity status
+    isTokenActive(token);
+    
+    return token;
+  });
 };
 
 // Get individual token by ID
@@ -848,5 +837,140 @@ export const getTokenHolderData = async (tokenId: string): Promise<{
         holder_dev: 0
       };
     }
+  }
+};
+
+// API function to convert tokens to creator performance data
+export const processTokensIntoCreators = async (tokens: Token[]): Promise<CreatorPerformance[]> => {
+  try {
+    // Extract unique creator IDs
+    const uniqueCreatorIds = new Set<string>();
+    tokens.forEach(token => {
+      if (token.creator) {
+        uniqueCreatorIds.add(token.creator);
+      }
+    });
+    
+    console.log(`Processing ${uniqueCreatorIds.size} unique creators from ${tokens.length} cached tokens`);
+    
+    // Group tokens by creator
+    const creatorTokensMap = new Map<string, Token[]>();
+    tokens.forEach(token => {
+      if (token.creator) {
+        if (!creatorTokensMap.has(token.creator)) {
+          creatorTokensMap.set(token.creator, []);
+        }
+        creatorTokensMap.get(token.creator)?.push(token);
+      }
+    });
+    
+    // Get user info for each creator
+    const creatorInfoPromises = Array.from(uniqueCreatorIds).map(async (principal) => {
+      try {
+        const user = await getUser(principal);
+        return { principal, user };
+      } catch (error) {
+        console.error(`Error fetching user info for ${principal}:`, error);
+        return null;
+      }
+    });
+    
+    const creatorInfoResults = await Promise.all(creatorInfoPromises);
+    
+    // Build creator performance data
+    const creators: CreatorPerformance[] = [];
+    
+    for (const creatorInfo of creatorInfoResults) {
+      if (!creatorInfo || !creatorInfo.user || !creatorInfo.user.username) continue;
+      
+      const { principal, user } = creatorInfo;
+      const creatorTokens = creatorTokensMap.get(principal) || [];
+      
+      if (creatorTokens.length === 0) continue;
+      
+      // Calculate active tokens count
+      const activeTokens = creatorTokens.filter(token => token.is_active !== false).length;
+      
+      // Calculate success rate (percentage of active tokens)
+      const successRate = creatorTokens.length > 0 
+        ? (activeTokens / creatorTokens.length) * 100
+        : 0;
+      
+      // Calculate total volume
+      const totalVolume = creatorTokens.reduce((sum, token) => sum + (token.volume || 0), 0);
+      
+      // Calculate BTC volume (convert from sats)
+      const btcVolume = totalVolume / 100000000;
+      
+      // Calculate confidence score based on success rate, active tokens, and volume
+      const volumeWeight = Math.min(1, btcVolume / 0.5); // Max out at 0.5 BTC volume
+      const activeTokensWeight = Math.min(1, activeTokens / 5); // Max out at 5 active tokens
+      const confidenceScore = Math.round(
+        (successRate * 0.5) + // 50% of score based on success rate
+        (volumeWeight * 30) + // 30% of score based on volume
+        (activeTokensWeight * 20) // 20% of score based on number of active tokens
+      );
+      
+      // Get total marketcap and holder count
+      const totalMarketcap = creatorTokens.reduce((sum, token) => sum + (token.marketcap || 0), 0);
+      const totalHolders = creatorTokens.reduce((sum, token) => sum + (token.holder_count || 0), 0);
+      
+      // Sort tokens by last activity
+      creatorTokens.sort((a, b) => {
+        return new Date(b.last_action_time || b.created_time).getTime() - 
+               new Date(a.last_action_time || a.created_time).getTime();
+      });
+      
+      // Get last token created
+      const lastTokenCreated = creatorTokens.length > 0 ? creatorTokens[0] : null;
+      
+      // Create the performance object
+      const performance: CreatorPerformance = {
+        principal,
+        username: user.username,
+        image: user.image,
+        totalTokens: creatorTokens.length,
+        activeTokens,
+        totalVolume,
+        btcVolume,
+        successRate,
+        confidenceScore,
+        weightedScore: confidenceScore, // For backward compatibility
+        totalHolders,
+        totalTrades: 0, // Not calculated from cached data
+        lastTokenCreated: lastTokenCreated ? lastTokenCreated.id : '',
+        totalMarketcap,
+        generatedMarketcapBTC: totalMarketcap / 100000000, // Convert from sats to BTC
+        generatedMarketcapUSD: 0, // Not calculated from cached data
+        rank: 0, // Will be set later
+        tokens: creatorTokens.sort((a, b) => {
+          const priceA = a.price_in_sats || a.price / 1000;
+          const priceB = b.price_in_sats || b.price / 1000;
+          return priceB - priceA;
+        }).slice(0, 25)
+      };
+      
+      creators.push(performance);
+    }
+    
+    // Sort by confidence score
+    creators.sort((a, b) => {
+      // Sort by confidence score first
+      const confidenceDiff = b.confidenceScore - a.confidenceScore;
+      // If equal, use marketcap as secondary criterion
+      return confidenceDiff !== 0 ? confidenceDiff : b.totalMarketcap - a.totalMarketcap;
+    });
+    
+    // Add rank to each creator
+    const rankedCreators = creators.map((creator, index) => ({
+      ...creator,
+      rank: index + 1
+    }));
+    
+    console.log(`Processed ${rankedCreators.length} creators with performance data`);
+    return rankedCreators;
+  } catch (error) {
+    console.error('Error processing tokens into creators:', error);
+    return [];
   }
 }; 
