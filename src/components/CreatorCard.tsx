@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CreatorPerformance, formatVolume, formatMarketcap, getBTCPrice } from '../services/api';
-import { formatNumber, formatPrice, getTimeSince } from '../utils/formatters';
+import { formatNumber, getTimeSince } from '../utils/formatters';
 
 interface CreatorCardProps {
   creator: CreatorPerformance;

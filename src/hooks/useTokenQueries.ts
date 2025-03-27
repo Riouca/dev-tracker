@@ -1,11 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { 
-  Token, 
   getNewestTokens, 
   getOlderRecentTokens, 
-  getTopTokens,
   findTopCreators,
-  CreatorPerformance,
   CreatorSortOption,
   calculateCreatorPerformance,
   getTokenHolderData,
