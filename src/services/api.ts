@@ -1,13 +1,14 @@
 import axios from 'axios';
-import { getFromRedis, setInRedis } from './redis';
 
 // Use the proxy server
 const PROXY_BASE_URL = 'http://localhost:4000/api';
 const API_BASE_URL = 'https://api.odin.fun/v1';
 
-const REDIS_TOP_TOKENS_KEY = 'dev_tracker_top_tokens';
-const REDIS_TOKEN_KEY = 'dev_tracker_token';
-const REDIS_CREATOR_TOKENS_KEY = 'dev_tracker_creator_tokens';
+// Vérifier si nous sommes en production ou en développement
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Utiliser l'URL appropriée selon l'environnement
+const BASE_URL = isProduction ? '/api' : PROXY_BASE_URL;
 
 export interface Token {
   id: string;
@@ -123,180 +124,147 @@ export interface CreatorPerformance {
   generatedMarketcapUSD: number;
 }
 
-// Get token image URL
+// Utility functions
 export const getTokenImageUrl = (tokenId: string): string => {
   return `https://images.odin.fun/token/${tokenId}`;
 };
 
-// Get user image URL
 export const getUserImageUrl = (principal: string): string => {
   return `https://images.odin.fun/user/${principal}`;
 };
 
-// Convert raw price to sats
 export const convertPriceToSats = (rawPrice: number): number => {
-  // The raw price is in satoshis * 1000
-  // For example, if raw price is 119, then it's 0.119 sats
-  return rawPrice / 1000;
+  // Convert from raw price to sats
+  // Raw price is in fractional BTC, so multiply by 100,000,000 to get sats
+  return Math.round(rawPrice * 100000000);
 };
 
-// Convert raw volume to BTC
 export const convertVolumeToBTC = (volume: number): number => {
-  // Raw volume is in sats, divide by 10^8 to get BTC
-  return volume / 100000000;
+  // Convert from raw volume to BTC
+  return volume / 100000000 / 1000;
 };
 
-// Convert raw marketcap to BTC
 export const convertMarketcapToBTC = (marketcap: number): number => {
-  // Raw marketcap is in sats, divide by 10^8 to get BTC
-  return marketcap / 100000000;
+  // Convert from raw marketcap to BTC
+  return marketcap / 100000000 / 1000;
 };
 
-// Get current BTC price in USD
 export const getBTCPrice = async (): Promise<number> => {
-  // Return a fixed value instead of calling an external API
-  return 88888;
+  try {
+    const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+    return response.data.bitcoin.usd;
+  } catch (error) {
+    console.error('Error fetching BTC price:', error);
+    return 60000; // Fallback to a reasonable estimate
+  }
 };
 
-// Convert BTC volume to USD
 export const convertBTCToUSD = async (btcAmount: number): Promise<number> => {
   const btcPrice = await getBTCPrice();
-  return btcAmount * (btcPrice || 88888); // Use 88888 as fallback
+  return btcAmount * btcPrice;
 };
 
-// Format volume for display
 export const formatVolume = (volume: number, inUSD = false): string => {
-  // Divide by 1000 to get correct value
-  const btcVolume = convertVolumeToBTC(volume) / 1000;
+  const btcVolume = convertVolumeToBTC(volume);
   
   if (inUSD) {
-    // For USD display
-    const usdValue = btcVolume * 88888; // Use fallback BTC price
+    // Rough USD conversion (1 BTC ~ $60,000)
+    const usdVolume = btcVolume * 60000;
     
-    if (usdValue >= 1000000) {
-      return `$${(usdValue / 1000000).toFixed(1)}M`;
-    } else if (usdValue >= 1000) {
-      return `$${(usdValue / 1000).toFixed(1)}K`;
+    if (usdVolume >= 1000000) {
+      return `$${(usdVolume / 1000000).toFixed(1)}M`;
+    } else if (usdVolume >= 1000) {
+      return `$${(usdVolume / 1000).toFixed(1)}K`;
     } else {
-      return `$${usdValue.toFixed(0)}`;
+      return `$${usdVolume.toFixed(0)}`;
     }
   } else {
-    // For BTC display
+    // BTC format
     if (btcVolume >= 1000) {
       return `${(btcVolume / 1000).toFixed(1)}K BTC`;
     } else if (btcVolume >= 1) {
-      return `${btcVolume.toFixed(1)} BTC`;
+      return `${btcVolume.toFixed(2)} BTC`;
     } else if (btcVolume >= 0.001) {
-      return `${btcVolume.toFixed(3)} BTC`;
+      return `${(btcVolume * 1000).toFixed(2)} mBTC`;
     } else {
-      return `${(volume / 1000000 / 1000).toFixed(2)}M sats`;
+      return `${(btcVolume * 1000000).toFixed(0)} sats`;
     }
   }
 };
 
-// Format marketcap for display
 export const formatMarketcap = (marketcap: number, inUSD = false): string => {
-  // Divide by 1000 to get correct value
-  const btcMarketcap = convertMarketcapToBTC(marketcap) / 1000;
+  const btcMarketcap = convertMarketcapToBTC(marketcap);
   
   if (inUSD) {
-    // For USD display
-    const usdValue = btcMarketcap * 88888; // Use fallback BTC price
+    // Rough USD conversion (1 BTC ~ $60,000)
+    const usdMarketcap = btcMarketcap * 60000;
     
-    if (usdValue >= 1000000) {
-      return `$${(usdValue / 1000000).toFixed(1)}M`;
-    } else if (usdValue >= 1000) {
-      return `$${(usdValue / 1000).toFixed(1)}K`;
+    if (usdMarketcap >= 1000000) {
+      return `$${(usdMarketcap / 1000000).toFixed(1)}M`;
+    } else if (usdMarketcap >= 1000) {
+      return `$${(usdMarketcap / 1000).toFixed(1)}K`;
     } else {
-      return `$${usdValue.toFixed(0)}`;
+      return `$${usdMarketcap.toFixed(0)}`;
     }
   } else {
-    // For BTC display
+    // BTC format
     if (btcMarketcap >= 1000) {
       return `${(btcMarketcap / 1000).toFixed(1)}K BTC`;
     } else if (btcMarketcap >= 1) {
-      return `${btcMarketcap.toFixed(1)} BTC`;
+      return `${btcMarketcap.toFixed(2)} BTC`;
+    } else if (btcMarketcap >= 0.001) {
+      return `${(btcMarketcap * 1000).toFixed(2)} mBTC`;
     } else {
-      return `${btcMarketcap.toFixed(3)} BTC`;
+      return `${(btcMarketcap * 1000000).toFixed(0)} sats`;
     }
   }
 };
 
-// Check if a token is active based on price and last activity
 export const isTokenActive = (token: Token): boolean => {
-  // Calculate price in sats if not already done
-  if (!token.price_in_sats) {
-    token.price_in_sats = convertPriceToSats(token.price);
+  // Check if token is priced too low
+  const inactiveThreshold = 0.000000001; // 1 sat per token
+  const notEnoughVolume = 0.00000001; // Minimum volume threshold (converted to BTC)
+  
+  let active = true;
+  let reason = '';
+  
+  if (token.price < inactiveThreshold) {
+    active = false;
+    reason = 'Price too low';
   }
   
-  // Calculate price change percentage if price_1d is available
-  if (token.price_1d && token.price_1d > 0) {
-    const currentPrice = token.price;
-    const previousPrice = token.price_1d;
-    token.price_change_24h = ((currentPrice - previousPrice) / previousPrice) * 100;
-  } else {
-    token.price_change_24h = 0;
+  // Check if token has had recent trading activity
+  else if (token.volume < notEnoughVolume) {
+    active = false;
+    reason = 'No trading volume';
   }
   
-  const priceInSats = token.price_in_sats;
-  const now = new Date();
-  const tokenCreationDate = new Date(token.created_time);
-  const lastActionDate = new Date(token.last_action_time);
-  
-  // Check if token is older than 15 minutes
-  const isOlderThan15Min = now.getTime() - tokenCreationDate.getTime() > 15 * 60 * 1000;
-  
-  // Check if token had no transactions in the last 3 days
-  const threeDaysAgo = new Date();
-  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-  const noRecentActivity = lastActionDate < threeDaysAgo;
-  
-  // New inactive rules:
-  // 1. Price under 0.2 sats and older than 15 minutes
-  // 2. Price under 0.4 sats, older than 15 minutes, and no transactions in 3 days
-  let isActive = true;
-  let inactiveReason = '';
-  
-  // Rule 1: Token under 0.2 sats and older than 15 minutes
-  if (priceInSats < 0.2 && isOlderThan15Min) {
-    isActive = false;
-    inactiveReason = 'Low price (< 0.2 sats)';
+  // Check if token is tradable
+  else if (!token.trading) {
+    active = false;
+    reason = 'Trading disabled';
   }
   
-  // Rule 2: Token under 0.4 sats, older than 15 minutes, and no activity in 3 days
-  if (priceInSats < 0.4 && isOlderThan15Min && noRecentActivity) {
-    isActive = false;
-    inactiveReason = inactiveReason ? `${inactiveReason} & No recent activity` : 'Low price (< 0.4 sats) & No recent activity';
-  }
+  // Set inactive status and reason
+  token.is_active = active;
+  token.inactive_reason = active ? '' : reason;
   
-  // Update token with activity status
-  token.is_active = isActive;
-  token.inactive_reason = isActive ? '' : inactiveReason;
-  
-  return isActive;
+  return active;
 };
+
+// API functions using server endpoints with Redis cache
 
 // Get individual token by ID
 export const getToken = async (tokenId: string): Promise<Token> => {
   try {
-    const cacheKey = `${REDIS_TOKEN_KEY}_${tokenId}`;
-    const cachedToken = await getFromRedis<Token>(cacheKey);
-    
-    if (cachedToken) {
-      return cachedToken;
-    }
-    
-    // Fetch from API via proxy
-    const response = await axios.get(`${API_BASE_URL}/token/${tokenId}`);
+    // Fetch from API via proxy with Redis cache
+    const response = await axios.get(`${BASE_URL}/token/${tokenId}`);
     const token = response.data;
     
     // Process token data
     if (token) {
       token.price_in_sats = convertPriceToSats(token.price);
       isTokenActive(token);
-      
-      // Cache for 2 minutes
-      await setInRedis(cacheKey, token, 120);
     }
     
     return token;
@@ -309,21 +277,9 @@ export const getToken = async (tokenId: string): Promise<Token> => {
 // Get user/creator by principal
 export const getUser = async (principal: string): Promise<any> => {
   try {
-    const cacheKey = `user_${principal}`;
-    const cachedUser = await getFromRedis<any>(cacheKey);
-    
-    if (cachedUser) {
-      return cachedUser;
-    }
-    
-    // Use proxy server like other endpoints to avoid CORS issues
-    const response = await axios.get(`${PROXY_BASE_URL}/user/${principal}`);
+    // Use proxy server which utilizes Redis cache
+    const response = await axios.get(`${BASE_URL}/user/${principal}`);
     const user = response.data;
-    
-    if (user) {
-      // Cache for 10 minutes
-      await setInRedis(cacheKey, user, 600);
-    }
     
     return user;
   } catch (error) {
@@ -332,31 +288,34 @@ export const getUser = async (principal: string): Promise<any> => {
   }
 };
 
-// Fetch recent trades for a token
+// Get token trades
 export const getTokenTrades = async (tokenId: string, limit = 50): Promise<Trade[]> => {
   try {
-    // Use proxy server
-    const response = await axios.get(`${PROXY_BASE_URL}/token/${tokenId}/trades`, {
+    const response = await axios.get(`${BASE_URL}/token/${tokenId}/trades`, {
       params: { limit }
     });
-    return response.data.data;
+    
+    return response.data.data || [];
   } catch (error) {
-    console.error('Error fetching token trades:', error);
+    console.error(`Error fetching token trades:`, error);
     return [];
   }
 };
 
-// Fetch top tokens by marketcap
+// Get top tokens by criteria
 export const getTopTokens = async (limit = 30, sort = 'marketcap'): Promise<Token[]> => {
   try {
-    // Use proxy server
-    const response = await axios.get(`${PROXY_BASE_URL}/tokens`, {
-      params: { limit, sort }
+    const response = await axios.get(`${BASE_URL}/tokens`, {
+      params: { 
+        sort, 
+        limit,
+        _t: Date.now() // Cache busting parameter
+      }
     });
     
     const tokens = response.data.data || [];
     
-    // Add price_in_sats and check activity status for each token
+    // Process tokens
     return tokens.map((token: Token) => {
       token.price_in_sats = convertPriceToSats(token.price);
       isTokenActive(token);
@@ -364,243 +323,142 @@ export const getTopTokens = async (limit = 30, sort = 'marketcap'): Promise<Toke
     });
   } catch (error) {
     console.error('Error fetching top tokens:', error);
-    
-    // Fallback to cache if proxy server fails
-    const redisKey = `${REDIS_TOP_TOKENS_KEY}_${sort}_${limit}`;
-    const redisData = await getFromRedis<Token[]>(redisKey);
-    if (redisData) {
-      console.log(`Proxy failed, using cached top tokens as fallback for sort=${sort}, limit=${limit}`);
-      return redisData;
-    }
-    
     return [];
   }
 };
 
-// Fetch tokens created by a specific creator
+// Get tokens by creator
 export const getCreatorTokens = async (principal: string, limit = 20, forceRefresh = false): Promise<Token[]> => {
   try {
-    // Use proxy server with cache-busting if force refresh is enabled
-    const cacheParam = forceRefresh ? `?_t=${Date.now()}` : '';
-    const response = await axios.get(`${PROXY_BASE_URL}/creator/${principal}/tokens${cacheParam}`, {
-      params: { limit }
+    // Add cache busting for forced refresh
+    const timestamp = forceRefresh ? Date.now() : '';
+    
+    const response = await axios.get(`${BASE_URL}/creator/${principal}/tokens`, {
+      params: { 
+        limit,
+        _t: timestamp
+      }
     });
     
     const tokens = response.data.data || [];
     
-    // Add price_in_sats and check activity status for each token
+    // Process tokens
     return tokens.map((token: Token) => {
       token.price_in_sats = convertPriceToSats(token.price);
       isTokenActive(token);
       return token;
     });
   } catch (error) {
-    console.error('Error fetching creator tokens:', error);
-    
-    // Fallback to cache if proxy server fails
-    const redisKey = `${REDIS_CREATOR_TOKENS_KEY}_${principal}_${limit}`;
-    const redisData = await getFromRedis<Token[]>(redisKey);
-    if (redisData) {
-      console.log(`Proxy failed, using cached creator tokens as fallback for ${principal}`);
-      return redisData;
-    }
-    
+    console.error(`Error fetching creator tokens:`, error);
     return [];
   }
 };
 
-// Calculate performance metrics for a token creator
+// Calculate performance metrics for a creator
 export const calculateCreatorPerformance = async (
   principal: string,
   forceRefresh = false
 ): Promise<CreatorPerformance | null> => {
   try {
-    // Create cache key for this creator's performance
-    const cacheKey = `creator_performance_${principal}`;
+    const tokens = await getCreatorTokens(principal, 50, forceRefresh);
     
-    // Check for cached performance if not forcing refresh
-    if (!forceRefresh) {
-      const cachedPerformance = await getFromRedis<CreatorPerformance>(cacheKey);
-      if (cachedPerformance) {
-        return cachedPerformance;
-      }
-    }
-    
-    // If forcing refresh or no cache, calculate fresh performance
-    const user = await getUser(principal);
-    // Pass forceRefresh to getCreatorTokens to ensure we get fresh data
-    const tokens = await getCreatorTokens(principal, 25, forceRefresh);
-    
-    if (!user || tokens.length === 0) {
+    if (!tokens || tokens.length === 0) {
       return null;
     }
     
-    let totalVolume = 0;
-    let activeTokens = 0;
-    let totalHolders = 0;
-    let totalTrades = 0;
-    let totalMarketcap = 0;
+    // Get creator info from the first token
+    const firstToken = tokens[0];
     
-    // Base marketcap per token (0.025 BTC)
-    const baseBtcMarketcapPerToken = 0.025;
-    const defaultBtcPrice = 88888; // Default BTC price in USD
-    const btcPrice = await getBTCPrice() || defaultBtcPrice;
+    // Filter active tokens (has price and is tradable)
+    const activeTokens = tokens.filter(token => token.is_active);
     
-    tokens.forEach(token => {
-      if (token.volume > 0) {
-        totalVolume += token.volume;
-      }
-      
-      if (token.is_active) {
-        activeTokens++;
-      }
-      
-      totalHolders += token.holder_count || 0;
-      totalTrades += (token.buy_count || 0) + (token.sell_count || 0);
-      
-      // Ajouter la marketcap du token (convertie en BTC)
-      const tokenMarketcapInBtc = token.marketcap / 100000000 / 1000;
-      totalMarketcap += tokenMarketcapInBtc;
-    });
+    // Calculate total volume across all tokens
+    const totalVolume = tokens.reduce((sum, token) => sum + token.volume, 0);
     
-    // Calculate success rate based on active tokens
-    const successRate = tokens.length > 0 ? (activeTokens / tokens.length) * 100 : 0;
+    // Calculate BTC volume 
+    const btcVolume = totalVolume / 100000000 / 1000;  // Convert to BTC
     
-    // Nouvelle logique : calculer les scores individuels selon les nouvelles spécifications
+    // Calculate success rate: percentage of tokens that are active vs all tokens
+    const successRate = tokens.length > 0 ? (activeTokens.length / tokens.length) * 100 : 0;
     
-    // Constantes pour les poids du score final
-    const successWeight = 0.33;  // 33% weight for success rate
-    const volumeWeight = 0.33;   // 33% weight for volume
-    const holdersWeight = 0.15;  // 15% weight for holders
-    const tradesWeight = 0.01;   // 1% weight for trades
-    const mcapWeight = 0.18;     // 18% weight for generated marketcap
+    // Calculate total marketcap of all tokens
+    const totalMarketcap = tokens.reduce((sum, token) => sum + token.marketcap, 0);
     
-    // 1. Volume score: linear scale based on BTC volume in USD
-    // For volume: $0 = 0 points, $600,000 = 100 points (linear scale)
-    const maxVolumeUSD = 600000; // $600K for maximum score
-    const volumeInUSD = totalVolume / 100000000 * btcPrice;
-    const volumeScore = Math.min(100, (volumeInUSD / maxVolumeUSD) * 100);
+    // Calculate total holders across all tokens
+    const totalHolders = tokens.reduce((sum, token) => sum + token.holder_count, 0);
     
-    // 2. Holders score: linear scale based on total holder count
-    // For holders: 0 = 0 points, 600 = 100 points (linear scale)
-    const maxHolders = 600; // 600 holders for maximum score
-    const holdersScore = Math.min(100, (totalHolders / maxHolders) * 100);
+    // Calculate total trades (buys + sells)
+    const totalTrades = tokens.reduce((sum, token) => sum + token.buy_count + token.sell_count, 0);
     
-    // 3. Trades score: linear scale based on total transaction count
-    // For trades: 0 = 0 points, 6000 = 100 points (linear scale)
-    const maxTrades = 6000; // 6000 transactions for maximum score
-    const tradesScore = Math.min(100, (totalTrades / maxTrades) * 100);
-    
-    // 4. Generated marketcap score: difference between total marketcap and base (0.025 BTC per token)
-    const baseMarketcap = tokens.length * baseBtcMarketcapPerToken;
-    const generatedMarketcap = Math.max(0, totalMarketcap - baseMarketcap);
-    
-    // Conversion to USD for logging
-    const generatedMarketcapUSD = generatedMarketcap * btcPrice;
-    
-    // 5. Marketcap score: linear scale based on generated marketcap over threshold
-    // For marketcap: $0 = 0 points, $100,000 = 100 points (linear scale)
-    const maxMarketcapUSD = 100000; // $100K for maximum score
-    const mcapScore = Math.min(100, (generatedMarketcapUSD / maxMarketcapUSD) * 100);
-    
-    // 6. Success rate with penalty for inactive tokens
-    let successScore = 0;
+    // Find the most recent token by creation date
+    let lastTokenCreated = '';
     if (tokens.length > 0) {
-      // Base success rate (active/total percentage)
-      const baseSuccessRate = (activeTokens / tokens.length) * 100;
-      
-      // Bonus/Penalty system:
-      // Each active token gives +6 bonus points (increased to favor more active tokens)
-      // Each inactive token gives a penalty that starts at -2 and increases by -0.5 for each additional token
-      // For example: 2 inactive tokens = -2 + (-2-0.5) = -4.5 penalty
-      const activeBonus = activeTokens * 6;
-      
-      let inactivePenalty = 0;
-      const inactiveTokens = tokens.length - activeTokens;
-      for (let i = 0; i < inactiveTokens; i++) {
-        inactivePenalty += 2 + (i * 0.5);
-      }
-      
-      // Calculate net bonus/penalty effect
-      const netEffect = activeBonus - inactivePenalty;
-      
-      // Apply to base success rate, but never below 0
-      successScore = Math.max(0, baseSuccessRate + netEffect);
-      
-      // Cap at 100 maximum
-      successScore = Math.min(100, successScore);
-      
-      // If no active tokens, use a more generous score based on token count
-      if (activeTokens === 0) {
-        // Start at 3 points for 0/1 and decrease by 0.5 per token
-        successScore = Math.max(0.5, 3 - (tokens.length * 0.5));
-      }
+      const sortedByDate = [...tokens].sort((a, b) => 
+        new Date(b.created_time).getTime() - new Date(a.created_time).getTime()
+      );
+      lastTokenCreated = sortedByDate[0].created_time;
     }
     
-    // Calculate weighted confidence score based on various metrics
-    const confidenceScore = Math.min(100, Math.max(0,
-      (successScore * successWeight) +
-      (volumeScore * volumeWeight) +
-      (holdersScore * holdersWeight) +
-      (tradesScore * tradesWeight) +
-      (mcapScore * mcapWeight)
-    ));
+    // Generate a weighted score that factors in:
+    // - Volume (40% weight)
+    // - Success rate (30% weight)
+    // - Number of tokens created (10% weight)
+    // - Total holders (20% weight)
     
-    // Find the most recently created token
-    const sortedByCreationTime = [...tokens].sort((a, b) => 
-      new Date(b.created_time).getTime() - new Date(a.created_time).getTime()
-    );
-    const lastTokenCreated = sortedByCreationTime.length > 0 ? sortedByCreationTime[0].created_time : undefined;
+    // Normalize values
+    const normalizedVolume = Math.min(1, btcVolume / 50); // Cap at 50 BTC
+    const normalizedSuccessRate = successRate / 100;
+    const normalizedTokenCount = Math.min(1, tokens.length / 10); // Cap at 10 tokens
+    const normalizedHolders = Math.min(1, totalHolders / 1000); // Cap at 1000 holders
     
-    // Calculate BTC volume for display (divide by 1000 to get correct value)
-    const btcVolume = convertVolumeToBTC(totalVolume) / 1000;
+    // Calculate weighted score (0-100)
+    const weightedScore = 
+      (normalizedVolume * 40) + 
+      (normalizedSuccessRate * 30) + 
+      (normalizedTokenCount * 10) + 
+      (normalizedHolders * 20);
     
-    const creatorPerformance = {
+    // Calculate a confidence score (0-100) weighted more towards successful tokens
+    // than just volume, which avoids rewarding pump and dumps
+    const confidenceScore = 
+      (normalizedVolume * 30) + 
+      (normalizedSuccessRate * 40) + 
+      (normalizedTokenCount * 10) + 
+      (normalizedHolders * 20);
+    
+    // Convert to BTC for display purposes
+    const generatedMarketcapBTC = totalMarketcap / 100000000 / 1000;
+    
+    // Rough USD conversion (1 BTC ~ $60k)
+    const generatedMarketcapUSD = generatedMarketcapBTC * 60000;
+    
+    return {
       principal,
-      username: user.username,
-      image: user.image,
+      username: tokens[0]?.creator || principal.substring(0, 8),
+      image: null, // Will be filled in if available
       totalTokens: tokens.length,
-      activeTokens,
+      activeTokens: activeTokens.length,
       totalVolume,
       btcVolume,
       successRate,
-      weightedScore: confidenceScore, // Keep weightedScore for compatibility, but use confidenceScore instead
+      weightedScore,
       confidenceScore,
+      tokens,
       totalHolders,
       totalTrades,
       lastTokenCreated,
       totalMarketcap,
-      generatedMarketcapBTC: generatedMarketcap,
-      generatedMarketcapUSD: generatedMarketcapUSD,
-      tokens: tokens.sort((a, b) => {
-        const priceA = a.price_in_sats || a.price / 1000;
-        const priceB = b.price_in_sats || b.price / 1000;
-        return priceB - priceA;
-      }).slice(0, 25)
+      generatedMarketcapBTC,
+      generatedMarketcapUSD
     };
-    
-    // Cache the calculated performance
-    try {
-      await setInRedis(cacheKey, creatorPerformance); // Cache for 5 minutes
-    } catch (error) {
-      console.error('Failed to cache creator performance:', error);
-    }
-    
-    return creatorPerformance;
   } catch (error) {
-    console.error(`Error calculating performance for creator ${principal}:`, error);
+    console.error(`Error calculating creator performance for ${principal}:`, error);
     return null;
   }
 };
 
-// Sort options for creators
+// Types and functions for creator management
 export type CreatorSortOption = 'volume' | 'active' | 'weighted' | 'confidence' | 'success' | 'tokens' | 'holders';
-
-// Session storage key for creators cache
-// const CREATORS_CACHE_KEY = 'forseti_creators_cache';
-// const CREATORS_CACHE_TIMESTAMP_KEY = 'forseti_creators_cache_timestamp';
-const CACHE_EXPIRY_TIME = 20 * 60 * 1000; // 20 minutes in milliseconds
-const REDIS_CACHE_KEY = 'dev_tracker_creators_data';
 
 // Helper function to retry API calls
 const retryApiCall = async <T>(
@@ -627,225 +485,174 @@ const retryApiCall = async <T>(
   throw lastError;
 };
 
-// Find top creators based on their token performance
+// Find top creators
 export const findTopCreators = async (
   limit = 200, 
   sortBy: CreatorSortOption = 'confidence',
   forceRefresh = false
 ): Promise<CreatorPerformance[]> => {
   try {
-    // Try to get data from cache if not forcing refresh
-    if (!forceRefresh) {
-      const redisData = await getFromRedis<CreatorPerformance[]>(REDIS_CACHE_KEY);
-      const redisTimestampKey = `${REDIS_CACHE_KEY}_timestamp`;
-      const cachedTimestamp = await getFromRedis<number>(redisTimestampKey);
+    // Cache busting parameter for forced refresh
+    const timestamp = forceRefresh ? Date.now() : '';
+    
+    // Use proxy endpoint to fetch via Redis server cache
+    const response = await axios.get(`${BASE_URL}/dashboard-parts`, {
+      params: {
+        part: 'top',
+        limit: 20,
+        _t: timestamp
+      }
+    });
+    
+    // Initial top tokens by marketcap
+    const tokens = response.data.data || [];
+    
+    // Use a map to track creator performances by principal
+    const creatorMap = new Map<string, CreatorPerformance>();
+    const creators: CreatorPerformance[] = [];
+    
+    // Group tokens by creator
+    for (const token of tokens) {
+      // Add price_in_sats and activity
+      token.price_in_sats = convertPriceToSats(token.price);
+      isTokenActive(token);
       
-      if (redisData) {
-        // Check if data is still fresh (less than CACHE_EXPIRY_TIME old)
-        const now = Date.now();
-        const isFresh = cachedTimestamp && (now - cachedTimestamp < CACHE_EXPIRY_TIME);
+      const creatorId = token.creator;
+      
+      if (!creatorMap.has(creatorId)) {
+        // Calculate creator metrics
+        const creatorPerf = await calculateCreatorPerformance(creatorId, forceRefresh);
         
-        if (isFresh) {
-          console.log('Using fresh cached creators data from Redis');
-          return sortCreatorsData(redisData, sortBy, limit);
-        } else {
-          console.log('Cached creators data exists but is stale, refreshing in background');
-          // For stale data, still use it but refresh in background (non-blocking)
-          setTimeout(() => {
-            refreshCreatorsCache().catch(err => 
-              console.error('Background refresh of creators cache failed:', err)
-            );
-          }, 100);
-          return sortCreatorsData(redisData, sortBy, limit);
+        if (creatorPerf) {
+          creatorMap.set(creatorId, creatorPerf);
+          creators.push(creatorPerf);
         }
       }
-    } else {
-      console.log('Force refresh enabled, bypassing cache for creators data');
     }
     
-    // If no valid cache or force refresh, fetch fresh data through the proxy
-    return await refreshCreatorsCache(sortBy, limit);
+    // Sort creators by selected criteria
+    const sortedCreators = sortCreatorsData(creators, sortBy, limit);
+    
+    // Update rank based on sorted order
+    sortedCreators.forEach((creator, index) => {
+      creator.rank = index + 1;
+    });
+    
+    return sortedCreators;
   } catch (error) {
-    console.error('Error finding top creators:', error);
-    
-    // Try to use cached data even if expired
-    const redisData = await getFromRedis<CreatorPerformance[]>(REDIS_CACHE_KEY);
-    if (redisData) {
-      console.log('Error in processing, using cached creators data as fallback');
-      return sortCreatorsData(redisData, sortBy, limit);
-    }
-    
+    console.error(`Error finding top creators:`, error);
     return [];
   }
 };
 
-// Helper function to refresh the creators cache
-const refreshCreatorsCache = async (
-  sortBy: CreatorSortOption = 'confidence',
-  limit = 200
-): Promise<CreatorPerformance[]> => {
-  console.log('Fetching creators data through topTokens');
-  
-  // We'll get top tokens first through the proxy
-  const topTokens = await getTopTokens(200);
-  console.log(`Fetched ${topTokens.length} top tokens by marketcap`);
-  
-  // Extract unique creator principals
-  const creatorSet = new Set<string>();
-  topTokens.forEach((token: Token) => {
-    if (token.creator && typeof token.creator === 'string') {
-      creatorSet.add(token.creator);
-    }
-  });
-  
-  const creatorPrincipals = Array.from(creatorSet);
-  console.log(`Found ${creatorPrincipals.length} unique creators from top tokens`);
-  
-  // Calculate performance for each creator
-  const performancePromises = creatorPrincipals.map(principal => 
-    calculateCreatorPerformance(principal, false)
-  );
-  
-  const performances = await Promise.all(performancePromises);
-  const validPerformances = performances.filter((perf): perf is CreatorPerformance => perf !== null);
-  
-  console.log(`Successfully calculated performance for ${validPerformances.length} creators`);
-  
-  // Cache the data
-  try {
-    // Store both the data and a timestamp
-    await setInRedis(REDIS_CACHE_KEY, validPerformances, CACHE_EXPIRY_TIME / 1000);
-    await setInRedis(`${REDIS_CACHE_KEY}_timestamp`, Date.now(), CACHE_EXPIRY_TIME / 1000);
-    console.log('Successfully cached creators data');
-  } catch (error) {
-    console.error('Failed to cache creators data:', error);
-  }
-  
-  // Sort and return the data
-  return sortCreatorsData(validPerformances, sortBy, limit);
-};
-
-// Helper function to sort creators data
+// Helper function to sort creators by different metrics
 const sortCreatorsData = (
   creators: CreatorPerformance[], 
   sortBy: CreatorSortOption, 
   limit: number
 ): CreatorPerformance[] => {
-  // Sort based on selected criteria
-  let sortedPerformances: CreatorPerformance[];
+  let sortedCreators = [...creators];
+  
   switch (sortBy) {
     case 'volume':
-      sortedPerformances = creators.sort((a, b) => b.totalVolume - a.totalVolume);
+      sortedCreators.sort((a, b) => b.totalVolume - a.totalVolume);
       break;
     case 'active':
-      sortedPerformances = creators.sort((a, b) => b.activeTokens - a.activeTokens);
+      sortedCreators.sort((a, b) => b.activeTokens - a.activeTokens);
       break;
     case 'weighted':
-      sortedPerformances = creators.sort((a, b) => b.weightedScore - a.weightedScore);
+      sortedCreators.sort((a, b) => b.weightedScore - a.weightedScore);
       break;
     case 'confidence':
-      sortedPerformances = creators.sort((a, b) => {
-        // Si les scores de confiance sont identiques, trier par marketcap
-        if (b.confidenceScore === a.confidenceScore) {
-          return b.totalMarketcap - a.totalMarketcap;
-        }
-        return b.confidenceScore - a.confidenceScore;
-      });
+      sortedCreators.sort((a, b) => b.confidenceScore - a.confidenceScore);
       break;
     case 'success':
-      sortedPerformances = creators.sort((a, b) => b.successRate - a.successRate);
+      sortedCreators.sort((a, b) => b.successRate - a.successRate);
       break;
     case 'tokens':
-      sortedPerformances = creators.sort((a, b) => b.totalTokens - a.totalTokens);
+      sortedCreators.sort((a, b) => b.totalTokens - a.totalTokens);
       break;
     case 'holders':
-      sortedPerformances = creators.sort((a, b) => {
+      sortedCreators.sort((a, b) => {
         const aHolders = a.totalHolders || 0;
         const bHolders = b.totalHolders || 0;
         return bHolders - aHolders;
       });
       break;
     default:
-      sortedPerformances = creators.sort((a, b) => {
-        // Si les scores de confiance sont identiques, trier par marketcap
-        if (b.confidenceScore === a.confidenceScore) {
-          return b.totalMarketcap - a.totalMarketcap;
-        }
-        return b.confidenceScore - a.confidenceScore;
-      });
+      sortedCreators.sort((a, b) => b.confidenceScore - a.confidenceScore);
   }
   
-  // Add ranking and calculate total holders
-  return sortedPerformances.slice(0, limit).map((perf, index) => ({
-    ...perf,
-    rank: index + 1,
-    totalHolders: perf.totalHolders || perf.tokens.reduce((sum, t) => sum + t.holder_count, 0)
-  }));
+  // Limit results 
+  return sortedCreators.slice(0, limit);
 };
 
-// Get tokens from followed creators
+// Get tokens from followed creators (using localStorage)
 export const getFollowedCreatorsTokens = async (creatorPrincipals: string[]): Promise<Token[]> => {
-  if (creatorPrincipals.length === 0) {
-    return [];
-  }
-  
   try {
-    const tokenPromises = creatorPrincipals.map(principal => getCreatorTokens(principal, 5));
-    const creatorTokensArrays = await Promise.all(tokenPromises);
+    if (!creatorPrincipals || creatorPrincipals.length === 0) {
+      return [];
+    }
     
-    // Flatten the array and sort by creation time (most recent first)
-    const allTokens = creatorTokensArrays
-      .flat()
-      .sort((a, b) => new Date(b.created_time).getTime() - new Date(a.created_time).getTime());
-    
-    // Remove duplicates (in case multiple followed creators have the same token)
-    const uniqueTokens = Array.from(
-      new Map(allTokens.map(token => [token.id, token])).values()
+    // Fetch tokens in parallel for each creator
+    const creatorTokensPromises = creatorPrincipals.map(principal => 
+      getCreatorTokens(principal)
     );
     
-    return uniqueTokens;
+    const results = await Promise.all(creatorTokensPromises);
+    
+    // Flatten results and sort by creation time (newest first)
+    const allTokens = results.flat();
+    allTokens.sort((a, b) => 
+      new Date(b.created_time).getTime() - new Date(a.created_time).getTime()
+    );
+    
+    return allTokens;
   } catch (error) {
     console.error('Error fetching followed creators tokens:', error);
     return [];
   }
 };
 
-// Get rarity level based on confidence score
+// Helper to get rarity level
 export const getRarityLevel = (score: number): string => {
-  if (score >= 100) return 'legendary';   // Gold - only perfect 100%
-  if (score >= 90) return 'epic';         // Purple
-  if (score >= 80) return 'great';        // Blue
-  if (score >= 70) return 'okay';         // Green
-  if (score >= 60) return 'neutral';      // White
-  if (score >= 45) return 'meh';          // Dark Orange (amber-600)
-  if (score >= 30) return 'scam';         // Brown
-  return 'scam';                          // Red
+  if (score >= 90) return 'legendary';
+  if (score >= 80) return 'epic';
+  if (score >= 70) return 'great';
+  if (score >= 60) return 'okay';
+  if (score >= 50) return 'neutral';
+  if (score >= 40) return 'meh';
+  return 'scam';
 };
 
-// Get trades for a specific user
+// Get user trades
 export const getUserTrades = async (principal: string, limit = 10): Promise<Trade[]> => {
   try {
-    const response = await retryApiCall(() => 
-      axios.get(`${API_BASE_URL}/trades?user=${principal}&limit=${limit}`)
-    );
+    const response = await axios.get(`${API_BASE_URL}/user/${principal}/trades`, {
+      params: { limit }
+    });
+    
     return response.data.data || [];
   } catch (error) {
-    console.error(`Error fetching trades for user ${principal}:`, error);
+    console.error('Error fetching user trades:', error);
     return [];
   }
 };
 
-// Fetch recently launched tokens with shorter cache time
+// Get recently launched tokens
 export const getRecentlyLaunchedTokens = async (limit = 20): Promise<Token[]> => {
   try {
-    // Use dedicated endpoint with short cache time
-    const response = await axios.get(`${PROXY_BASE_URL}/recent-tokens`, {
-      params: { limit }
+    // Use dedicated API endpoint for recent tokens with better caching
+    const response = await axios.get(`${BASE_URL}/recent-tokens`, {
+      params: { 
+        limit,
+        _t: Date.now() // Cache busting parameter
+      }
     });
     
     const tokens = response.data.data || [];
     
-    // Add price_in_sats and check activity status for each token
+    // Process tokens
     return tokens.map((token: Token) => {
       token.price_in_sats = convertPriceToSats(token.price);
       isTokenActive(token);
@@ -853,180 +660,80 @@ export const getRecentlyLaunchedTokens = async (limit = 20): Promise<Token[]> =>
     });
   } catch (error) {
     console.error('Error fetching recently launched tokens:', error);
-    
-    // Fallback to direct API call if proxy fails
-    try {
-      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=${limit}`);
-      const tokens = response.data.data || [];
-      
-      return tokens.map((token: Token) => {
-        token.price_in_sats = convertPriceToSats(token.price);
-        isTokenActive(token);
-        return token;
-      });
-    } catch (directError) {
-      console.error('Direct API fallback failed:', directError);
-      return [];
-    }
+    return [];
   }
 };
 
-// Fetch the 4 newest tokens with a short cache time (10 seconds)
+// Get newest tokens (1-4)
 export const getNewestTokens = async (): Promise<Token[]> => {
   try {
-    // Check Redis cache first
-    const redisKey = 'newest_tokens';
-    const cachedTokens = await getFromRedis<Token[]>(redisKey);
-    
-    // If we have cached data that's less than 10 seconds old, use it
-    if (cachedTokens) {
-      console.log('Using cached newest tokens from Redis');
-      return cachedTokens.map((token: Token) => {
-        // Ensure token has price_in_sats and activity status
-        if (!token.price_in_sats) {
-          token.price_in_sats = convertPriceToSats(token.price);
-        }
-        if (token.is_active === undefined) {
-          isTokenActive(token);
-        }
-        return token;
-      });
-    }
-    
-    // If no cache or cache expired, fetch from proxy
-    // Add a timestamp to bust any proxy caching
-    const timestamp = Date.now();
-    // Use dedicated endpoint with very short cache time
-    const response = await axios.get(`${PROXY_BASE_URL}/newest-tokens?_t=${timestamp}`);
+    // Use optimized endpoint for newest tokens
+    const response = await axios.get(`${BASE_URL}/newest-tokens`, {
+      params: {
+        _t: Date.now() // Cache busting parameter for frontend
+      }
+    });
     
     const tokens = response.data.data || [];
     
-    // Process tokens and save to cache
-    const processedTokens = tokens.map((token: Token) => {
+    // Process tokens
+    return tokens.map((token: Token) => {
       token.price_in_sats = convertPriceToSats(token.price);
       isTokenActive(token);
       return token;
     });
-    
-    // Store in Redis with 10 second expiry
-    await setInRedis(redisKey, processedTokens, 10);
-    
-    return processedTokens;
   } catch (error) {
     console.error('Error fetching newest tokens:', error);
-    
-    // Fallback to direct API call if proxy fails and we have no cache
-    try {
-      const timestamp = Date.now()
-      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=1&limit=4&_t=${timestamp}`);
-      const tokens = response.data.data || [];
-      
-      return tokens.map((token: Token) => {
-        token.price_in_sats = convertPriceToSats(token.price);
-        isTokenActive(token);
-        return token;
-      });
-    } catch (directError) {
-      console.error('Direct API fallback failed:', directError);
-      return [];
-    }
+    return [];
   }
 };
 
-// Fetch older recent tokens (5-30) with a longer cache time (1 minute)
+// Get older recent tokens (5-30)
 export const getOlderRecentTokens = async (limit = 26): Promise<Token[]> => {
   try {
-    // Check Redis cache first
-    const redisKey = `older_recent_tokens_${limit}`;
-    const cachedTokens = await getFromRedis<Token[]>(redisKey);
-    
-    // If we have cached data that's less than 60 seconds old, use it
-    if (cachedTokens) {
-      console.log('Using cached older recent tokens from Redis');
-      return cachedTokens.map((token: Token) => {
-        // Ensure token has price_in_sats and activity status
-        if (!token.price_in_sats) {
-          token.price_in_sats = convertPriceToSats(token.price);
-        }
-        if (token.is_active === undefined) {
-          isTokenActive(token);
-        }
-        return token;
-      });
-    }
-    
-    // If no cache or cache expired, fetch from proxy
-    // Add a timestamp to bust any proxy caching
-    const timestamp = Date.now();
-    // Use dedicated endpoint with longer cache time
-    const response = await axios.get(`${PROXY_BASE_URL}/older-recent-tokens?_t=${timestamp}`, {
-      params: { limit }
+    // Use optimized endpoint for older recent tokens
+    const response = await axios.get(`${BASE_URL}/older-recent-tokens`, {
+      params: { 
+        limit,
+        _t: Date.now()  // Cache busting parameter
+      }
     });
     
     const tokens = response.data.data || [];
     
-    // Process tokens and save to cache
-    const processedTokens = tokens.map((token: Token) => {
+    // Process tokens
+    return tokens.map((token: Token) => {
       token.price_in_sats = convertPriceToSats(token.price);
       isTokenActive(token);
       return token;
     });
-    
-    // Store in Redis with 60 second expiry
-    await setInRedis(redisKey, processedTokens, 60);
-    
-    return processedTokens;
   } catch (error) {
     console.error('Error fetching older recent tokens:', error);
-    
-    // Fallback to direct API call if proxy fails and we have no cache
-    try {
-      const timestamp = Date.now()
-      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=2&limit=${limit}&_t=${timestamp}`);
-      const tokens = response.data.data || [];
-      
-      return tokens.map((token: Token) => {
-        token.price_in_sats = convertPriceToSats(token.price);
-        isTokenActive(token);
-        return token;
-      });
-    } catch (directError) {
-      console.error('Direct API fallback failed:', directError);
-      return [];
-    }
+    return [];
   }
 };
 
-// Get fresh token holder data (refreshed every minute)
+// Get token holder data only
 export const getTokenHolderData = async (tokenId: string): Promise<{ 
   holder_count: number, 
   holder_top: number, 
   holder_dev: number 
 }> => {
   try {
-    // Add timestamp to bust any proxy caching
-    const timestamp = Date.now()
-    // Use dedicated endpoint with short cache time
-    const response = await axios.get(`${PROXY_BASE_URL}/token/${tokenId}/holders?_t=${timestamp}`);
-    return response.data;
-  } catch (error) {
-    console.error(`Error fetching token holder data for ${tokenId}:`, error);
+    // Use dedicated endpoint with shorter cache time
+    const response = await axios.get(`${BASE_URL}/token/${tokenId}/holders`);
     
-    // Fallback to regular token endpoint if holder endpoint fails
-    try {
-      const tokenData = await getToken(tokenId);
-      return {
-        holder_count: tokenData.holder_count,
-        holder_top: tokenData.holder_top,
-        holder_dev: tokenData.holder_dev
-      };
-    } catch (fallbackError) {
-      console.error('Fallback fetch failed:', fallbackError);
-      return {
-        holder_count: 0,
-        holder_top: 0,
-        holder_dev: 0
-      };
-    }
+    return {
+      holder_count: response.data.holder_count || 0,
+      holder_top: response.data.holder_top || 0,
+      holder_dev: response.data.holder_dev || 0
+    };
+  } catch (error) {
+    console.error(`Error fetching token holders for ${tokenId}:`, error);
+    return {
+      holder_count: 0,
+      holder_top: 0,
+      holder_dev: 0
+    };
   }
 }; 
