@@ -553,103 +553,93 @@ const retryApiCall = async <T>(
   throw lastError;
 };
 
-// Find top creators based on their token performance
+// Find top creators sorted by specified option
 export const findTopCreators = async (
-  limit = 200, 
-  sortBy: CreatorSortOption = 'confidence',
-  forceRefresh = false
+  limit = 100, 
+  sortBy: CreatorSortOption = 'confidence', 
+  forceRefresh = false,
+  tokensLimit = 125 // Nouveau paramètre pour récupérer plus de tokens
 ): Promise<CreatorPerformance[]> => {
   try {
-    // Force refresh is ignored in this implementation without caching
-    // We'll get top tokens first through the proxy
-    const topTokens = await getTopTokens(200);
-    console.log(`Fetched ${topTokens.length} top tokens by marketcap`);
+    console.log(`Finding top ${limit} creators sorted by ${sortBy} (fetching ${tokensLimit} tokens first)`);
     
-    // Extract unique creator principals
-    const creatorSet = new Set<string>();
-    topTokens.forEach((token: Token) => {
-      if (token.creator && typeof token.creator === 'string') {
-        creatorSet.add(token.creator);
+    // Get top tokens by marketcap
+    const topTokens = await getTopTokens(tokensLimit);
+    
+    // Extract unique creator IDs
+    const uniqueCreatorIds = new Set<string>();
+    topTokens.forEach(token => {
+      if (token.creator) {
+        uniqueCreatorIds.add(token.creator);
       }
     });
     
-    const creatorPrincipals = Array.from(creatorSet);
-    console.log(`Found ${creatorPrincipals.length} unique creators from top tokens`);
+    console.log(`Found ${uniqueCreatorIds.size} unique creators from ${topTokens.length} tokens`);
     
-    // Calculate performance for each creator
-    const performancePromises = creatorPrincipals.map(principal => 
-      calculateCreatorPerformance(principal, forceRefresh)
-    );
+    // Get performance data for each creator
+    const creators: CreatorPerformance[] = [];
+    const promises: Promise<CreatorPerformance | null>[] = [];
     
-    const performances = await Promise.all(performancePromises);
-    const validPerformances = performances.filter((perf): perf is CreatorPerformance => perf !== null);
+    uniqueCreatorIds.forEach(creatorId => {
+      promises.push(calculateCreatorPerformance(creatorId, forceRefresh));
+    });
     
-    console.log(`Successfully calculated performance for ${validPerformances.length} creators`);
+    const results = await Promise.all(promises);
     
-    // Sort and return the data
-    return sortCreatorsData(validPerformances, sortBy, limit);
+    // Filter out null results and creators with no username
+    results.forEach(result => {
+      if (result && result.username) {
+        creators.push(result);
+      }
+    });
+    
+    // Sort creators by the specified option
+    let sortedCreators = [...creators];
+    
+    sortedCreators.sort((a, b) => {
+      switch (sortBy) {
+        case 'tokens':
+          return b.totalTokens - a.totalTokens;
+        case 'active':
+          return b.activeTokens - a.activeTokens;
+        case 'volume':
+          return b.totalVolume - a.totalVolume;
+        case 'success':
+          return b.successRate - a.successRate;
+        case 'weighted':
+          return b.weightedScore - a.weightedScore;
+        case 'confidence':
+          // Sort by confidence score first
+          const confidenceDiff = b.confidenceScore - a.confidenceScore;
+          // If confidence scores are equal, sort by marketcap as secondary criterion
+          if (confidenceDiff === 0) {
+            return b.totalMarketcap - a.totalMarketcap;
+          }
+          return confidenceDiff;
+        case 'holders':
+          const aHolders = a.totalHolders || 0;
+          const bHolders = b.totalHolders || 0;
+          return bHolders - aHolders;
+        default:
+          return b.confidenceScore - a.confidenceScore;
+      }
+    });
+    
+    // Limit to requested number
+    sortedCreators = sortedCreators.slice(0, limit);
+    
+    // Add rank to each creator
+    sortedCreators = sortedCreators.map((creator, index) => ({
+      ...creator,
+      rank: index + 1
+    }));
+    
+    console.log(`Returning ${sortedCreators.length} sorted creators`);
+    return sortedCreators;
   } catch (error) {
     console.error('Error finding top creators:', error);
     return [];
   }
-};
-
-// Helper function to sort creators data
-const sortCreatorsData = (
-  creators: CreatorPerformance[], 
-  sortBy: CreatorSortOption, 
-  limit: number
-): CreatorPerformance[] => {
-  // Sort based on selected criteria
-  let sortedPerformances: CreatorPerformance[];
-  switch (sortBy) {
-    case 'volume':
-      sortedPerformances = creators.sort((a, b) => b.totalVolume - a.totalVolume);
-      break;
-    case 'active':
-      sortedPerformances = creators.sort((a, b) => b.activeTokens - a.activeTokens);
-      break;
-    case 'weighted':
-      sortedPerformances = creators.sort((a, b) => b.weightedScore - a.weightedScore);
-      break;
-    case 'confidence':
-      sortedPerformances = creators.sort((a, b) => {
-        // Si les scores de confiance sont identiques, trier par marketcap
-        if (b.confidenceScore === a.confidenceScore) {
-          return b.totalMarketcap - a.totalMarketcap;
-        }
-        return b.confidenceScore - a.confidenceScore;
-      });
-      break;
-    case 'success':
-      sortedPerformances = creators.sort((a, b) => b.successRate - a.successRate);
-      break;
-    case 'tokens':
-      sortedPerformances = creators.sort((a, b) => b.totalTokens - a.totalTokens);
-      break;
-    case 'holders':
-      sortedPerformances = creators.sort((a, b) => {
-        const aHolders = a.totalHolders || 0;
-        const bHolders = b.totalHolders || 0;
-        return bHolders - aHolders;
-      });
-      break;
-    default:
-      sortedPerformances = creators.sort((a, b) => {
-        // Si les scores de confiance sont identiques, trier par marketcap
-        if (b.confidenceScore === a.confidenceScore) {
-          return b.totalMarketcap - a.totalMarketcap;
-        }
-        return b.confidenceScore - a.confidenceScore;
-      });
-  }
-  
-  // Add ranking and calculate total holders
-  return sortedPerformances.slice(0, limit).map((perf, index) => ({
-    ...perf,
-    rank: index + 1,
-    totalHolders: perf.totalHolders || perf.tokens.reduce((sum, t) => sum + t.holder_count, 0)
-  }));
 };
 
 // Get tokens from followed creators
@@ -780,16 +770,17 @@ export const getNewestTokens = async (): Promise<Token[]> => {
 };
 
 // Fetch older recent tokens (5-30) with a longer cache time
-export const getOlderRecentTokens = async (limit = 26): Promise<Token[]> => {
+export const getOlderRecentTokens = async (limit = 26, offset = 4): Promise<Token[]> => {
   try {
     // Add a timestamp to bust any proxy caching
     const timestamp = Date.now();
-    // Use dedicated endpoint with longer cache time
+    // Use dedicated endpoint with longer cache time, explicitly specifying the offset
     const response = await axios.get(`${PROXY_BASE_URL}/older-recent-tokens?_t=${timestamp}`, {
-      params: { limit }
+      params: { limit, offset }
     });
     
     const tokens = response.data.data || [];
+    console.log(`Fetched ${tokens.length} older tokens from API with offset ${offset}`);
     
     // Process tokens
     const processedTokens = tokens.map((token: Token) => {
@@ -805,8 +796,14 @@ export const getOlderRecentTokens = async (limit = 26): Promise<Token[]> => {
     // Fallback to direct API call if proxy fails
     try {
       const timestamp = Date.now()
-      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=2&limit=${limit}&_t=${timestamp}`);
+      // In fallback, if offset is provided, we need to get tokens from the second page
+      // and adjust the limit and offset accordingly
+      const page = Math.ceil((offset + 1) / 20); // Calculate page number based on offset
+      const pageOffset = offset % 20; // Calculate offset within the page
+      
+      const response = await axios.get(`${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=${page}&limit=${limit}&offset=${pageOffset}&_t=${timestamp}`);
       const tokens = response.data.data || [];
+      console.log(`Fetched ${tokens.length} older tokens from direct API call (fallback) with offset ${offset}, page ${page}`);
       
       return tokens.map((token: Token) => {
         token.price_in_sats = convertPriceToSats(token.price);

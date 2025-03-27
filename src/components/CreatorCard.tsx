@@ -408,7 +408,7 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
                       </div>
                     </div>
                     <div className="token-price-container">
-                      <div className="token-price-large">{formatPrice(token.price)}</div>
+                      <div className="token-price-large">{(token.price_in_sats || 0).toFixed(3)} sats</div>
                       <div className="token-price-change">
                         {token.price_change_24h !== undefined ? (
                           <span className={token.price_change_24h >= 0 ? 'price-up' : 'price-down'}>

@@ -3,7 +3,7 @@
  */
 export function formatPrice(price: number): string {
   const priceInSats = price / 1000
-  return `${priceInSats.toFixed(2)} sats`
+  return `${priceInSats.toFixed(3)} sats`
 }
 
 /**
@@ -76,4 +76,25 @@ export function formatDeveloperHoldings(developerHoldings: number, totalSupply: 
   } else {
     return Math.round(percentage) + '%';
   }
-} 
+}
+
+// Format the last updated time with seconds
+export const formatLastUpdated = (date: Date): string => {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  
+  if (diffSecs < 60) return `${diffSecs} seconds ago`;
+  
+  const diffMins = Math.floor(diffSecs / 60);
+  if (diffMins === 1) return '1 minute ago';
+  if (diffMins < 60) return `${diffMins} minutes ago`;
+  
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours === 1) return '1 hour ago';
+  if (diffHours < 24) return `${diffHours} hours ago`;
+  
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'Yesterday';
+  return `${diffDays} days ago`;
+}; 

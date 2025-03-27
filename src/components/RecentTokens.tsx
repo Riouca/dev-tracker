@@ -1,332 +1,35 @@
-import { useState, useEffect, useRef, useContext } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   getUserImageUrl, 
   getTokenImageUrl, 
   formatVolume, 
   formatMarketcap,
   getBTCPrice,
-  Token as ApiToken,
   getRarityLevel,
-  CreatorPerformance,
-  calculateCreatorPerformance,
-  getNewestTokens,
-  getOlderRecentTokens,
-  getTokenHolderData
 } from '../services/api'
 import { formatPrice, formatNumber, getTimeSince, formatDeveloperHoldings } from '../utils/formatters'
-import { PreloadContext } from '../App'
-import { useNewestTokens, useOlderRecentTokens, useCreatorPerformance } from '../hooks/useTokenQueries'
-
-interface TokenWithCreator {
-  token: ApiToken;
-  creator: CreatorPerformance | null;
-}
+import { useRecentTokensRedux } from '../hooks/useRecentTokensRedux'
 
 export function RecentTokens() {
-  // Context for preloaded data
-  const { 
-    recentTokens: preloadedNewestTokens, 
-    olderTokens: preloadedOlderTokens,
-    updateRecentTokens,
-    updateOlderTokens,
-    lastRecentUpdate,
-    lastOlderUpdate
-  } = useContext(PreloadContext)
-  
-  const [tokens, setTokens] = useState<TokenWithCreator[]>([])
-  const [filteredTokens, setFilteredTokens] = useState<TokenWithCreator[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [showUSD, setShowUSD] = useState(true) // Default to USD display
-  const [usdPrice, setUsdPrice] = useState<number | null>(null)
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [displayTime, setDisplayTime] = useState<string>('')
-  const [expandedCreators, setExpandedCreators] = useState<Set<string>>(new Set())
-  const [confidenceFilter, setConfidenceFilter] = useState<string>('all')
-  const [newTokenIds, setNewTokenIds] = useState<Set<string>>(new Set())
-  const [followedCreators, setFollowedCreators] = useState<string[]>([])
-  const [silentlyUpdating, setSilentlyUpdating] = useState(false)
-  
-  // References
-  const currentTokenIdsRef = useRef<Set<string>>(new Set())
-  const lastProcessedHashRef = useRef<string>('')
-
-  // React Query for newest tokens (1-4)
-  const { 
-    data: newestData, 
-    isLoading: isNewestLoading,
-    isError: isNewestError,
-    dataUpdatedAt: newestUpdatedAt
-  } = useNewestTokens({
-    // Only run query if we don't have preloaded data
-    enabled: !preloadedNewestTokens || preloadedNewestTokens.length === 0,
-    // Refetch interval
-    refetchInterval: 10000 // 10 seconds
-  });
-
-  // Cast to proper type
-  const newestTokens = newestData as ApiToken[] || [];
-
-  // React Query for older tokens (5-30)
+  // Utiliser notre hook Redux personnalisé
   const {
-    data: olderData,
-    isLoading: isOlderLoading,
-    isError: isOlderError,
-    dataUpdatedAt: olderUpdatedAt
-  } = useOlderRecentTokens(26, {
-    // Only run query if we don't have preloaded data
-    enabled: !preloadedOlderTokens || preloadedOlderTokens.length === 0,
-    // Refetch interval
-    refetchInterval: 60000 // 1 minute
-  });
-
-  // Cast to proper type
-  const olderTokens = olderData as ApiToken[] || [];
-
-  // Update context when data changes
-  useEffect(() => {
-    if (newestTokens && newestTokens.length > 0) {
-      // Only update if we don't already have this data or if the first token has changed
-      if (!preloadedNewestTokens || 
-          preloadedNewestTokens.length === 0 || 
-          preloadedNewestTokens[0]?.id !== newestTokens[0]?.id) {
-        console.log('Updating newest tokens in context');
-        updateRecentTokens(newestTokens);
-      }
-    }
-    // Don't include updateRecentTokens in dependencies to avoid update loops
-  }, [newestTokens, preloadedNewestTokens]);
-
-  // Update context when older tokens data changes
-  useEffect(() => {
-    if (olderTokens && olderTokens.length > 0) {
-      // Only update if we don't already have this data or if the first token has changed
-      if (!preloadedOlderTokens || 
-          preloadedOlderTokens.length === 0 ||
-          preloadedOlderTokens[0]?.id !== olderTokens[0]?.id) {
-        console.log('Updating older tokens in context');
-        updateOlderTokens(olderTokens);
-      }
-    }
-    // Don't include updateOlderTokens in dependencies to avoid update loops
-  }, [olderTokens, preloadedOlderTokens]);
-
-  // Use effect to process data when it changes - with optimizations
-  useEffect(() => {
-    // Évite le traitement redondant si tous ces conditions sont vraies:
-    // 1. Nous sommes déjà en train de charger
-    // 2. Nous avons déjà des tokens
-    // 3. Les données n'ont pas changé
-    if (loading && tokens.length > 0) {
-      return;
-    }
-    
-    // Decide which data to use
-    const newestData = preloadedNewestTokens?.length > 0 ? preloadedNewestTokens : newestTokens;
-    const olderData = preloadedOlderTokens?.length > 0 ? preloadedOlderTokens : olderTokens;
-    
-    // Si nous n'avons pas de données du tout, on sort
-    if ((!newestData || newestData.length === 0) && (!olderData || olderData.length === 0)) {
-      return;
-    }
-    
-    // Calculate a simple hash of token IDs to detect actual changes
-    const tokenIdsHash = [...(newestData || []), ...(olderData || [])]
-      .map(token => token.id)
-      .join('-');
-    
-    // Only proceed if the hash has changed - this prevents infinite updates
-    if (lastProcessedHashRef.current === tokenIdsHash) {
-      return;
-    }
-    
-    // Update the last processed hash
-    lastProcessedHashRef.current = tokenIdsHash;
-    
-    // Set loading only if we don't have tokens yet
-    if (tokens.length === 0) {
-      setLoading(true);
-    }
-    
-    // Use a debounce mechanism to prevent too frequent updates
-    const processingTimer = setTimeout(() => {
-      console.log('Processing tokens with creators');
-      processTokensWithCreators(newestData, olderData);
-    }, 100);
-    
-    return () => clearTimeout(processingTimer);
-  }, [newestTokens, olderTokens, preloadedNewestTokens, preloadedOlderTokens, loading, tokens]);
-
-  // Process tokens and fetch their creators
-  const processTokensWithCreators = async (newestData: ApiToken[], olderData: ApiToken[]) => {
-    try {
-      // Use the data we have (either from preload or React Query)
-      const allRecentTokens = [...(newestData || []), ...(olderData || [])];
-      
-      if (allRecentTokens.length === 0) {
-        // No data yet
-        return;
-      }
-      
-      // Compare with existing tokens to find new ones
-      const currentTokenIds = currentTokenIdsRef.current;
-      const justAddedTokenIds = newestData
-        .filter(token => !currentTokenIds.has(token.id))
-        .map(token => token.id);
-        
-      // Only force refresh creators that are affected by new tokens
-      // This reduces the number of API calls significantly
-      const affectedCreators = new Set<string>();
-      
-      // Add creators of new tokens to the list of affected creators
-      justAddedTokenIds.forEach(tokenId => {
-        const token = newestData.find(t => t.id === tokenId);
-        if (token && token.creator) {
-          affectedCreators.add(token.creator);
-        }
-      });
-      
-      // Check if we need a full refresh (first load) or just an incremental update
-      const needsFullRefresh = tokens.length === 0;
-      
-      // Process tokens and get creator data
-      const tokensWithCreators: TokenWithCreator[] = [];
-      
-      // Create a map of existing tokens to reuse creator data where possible
-      const existingTokenMap = new Map<string, TokenWithCreator>();
-      tokens.forEach(t => existingTokenMap.set(t.token.id, t));
-      
-      // Get creator performance for each token with the appropriate refresh strategy
-      for (const token of allRecentTokens) {
-        try {
-          // Only refresh creator data if:
-          // 1. This is a full refresh (first load)
-          // 2. This creator is affected by new tokens
-          // 3. We don't have this token's data yet
-          const existingToken = existingTokenMap.get(token.id);
-          const forceRefreshCreator = needsFullRefresh || 
-                                     affectedCreators.has(token.creator) || 
-                                     !existingToken;
-          
-          if (!forceRefreshCreator && existingToken) {
-            // Reuse existing creator data to avoid unnecessary API calls
-            tokensWithCreators.push(existingToken);
-            continue;
-          }
-          
-          // Get fresh creator data
-          const creatorPerformance = await calculateCreatorPerformance(token.creator, forceRefreshCreator);
-          tokensWithCreators.push({
-            token: token,
-            creator: creatorPerformance
-          });
-        } catch (err) {
-          console.error(`Error fetching creator data for token ${token.id}:`, err);
-          tokensWithCreators.push({
-            token: token,
-            creator: null
-          });
-        }
-      }
-      
-      // Sync creator data across all occurrences of the same creator
-      const creatorLatestData = new Map<string, CreatorPerformance>();
-      
-      // Find the most up-to-date creator data for each creator
-      tokensWithCreators.forEach(({ token, creator }) => {
-        if (!creator) return;
-        
-        const creatorId = token.creator;
-        const currentLatest = creatorLatestData.get(creatorId);
-        
-        if (!currentLatest || creator.tokens.length > currentLatest.tokens.length) {
-          creatorLatestData.set(creatorId, creator);
-        }
-      });
-      
-      // Update all tokens to use the most up-to-date creator data
-      tokensWithCreators.forEach(tokenWithCreator => {
-        const creatorId = tokenWithCreator.token.creator;
-        const latestCreatorData = creatorLatestData.get(creatorId);
-        
-        if (tokenWithCreator.creator && latestCreatorData) {
-          tokenWithCreator.creator = latestCreatorData;
-        }
-      });
-      
-      // Update new token IDs if we found any
-      if (justAddedTokenIds.length > 0 && !loading) {
-        setNewTokenIds(new Set(justAddedTokenIds));
-        
-        // Clear highlighting after 3 seconds
-        setTimeout(() => {
-          setNewTokenIds(new Set());
-        }, 3000);
-      } else {
-        setNewTokenIds(new Set());
-      }
-      
-      // Update current token IDs for next comparison
-      currentTokenIdsRef.current = new Set(allRecentTokens.map(token => token.id));
-      
-      // Update state
-      setTokens(tokensWithCreators);
-      
-      // Apply filter
-      const filtered = filterTokensByConfidence(tokensWithCreators, confidenceFilter);
-      setFilteredTokens(filtered);
-      
-      // Update loading state
-      setLoading(false);
-      
-      // Update timestamp
-      const updateTime = Math.max(
-        newestUpdatedAt || 0,
-        olderUpdatedAt || 0,
-        lastRecentUpdate?.getTime() || 0,
-        lastOlderUpdate?.getTime() || 0
-      );
-      
-      if (updateTime > 0) {
-        setLastUpdated(new Date(updateTime));
-      } else {
-        setLastUpdated(new Date());
-      }
-      
-    } catch (err) {
-      console.error('Error processing tokens with creators:', err);
-      setError('Failed to process token data. Please try again later.');
-      setLoading(false);
-    }
-  };
-
-  // Filter tokens based on confidence only (remove favorites filter)
-  useEffect(() => {
-    let filtered = [...tokens];
-    
-    // Apply confidence filter
-    if (confidenceFilter !== 'all' && filtered.length > 0) {
-      filtered = filtered.filter(({ creator }) => {
-        if (!creator) return false;
-        
-        const score = creator.confidenceScore;
-        switch (confidenceFilter) {
-          case 'legendary':
-            return score >= 90;
-          case 'high':
-            return score >= 70 && score < 90;
-          case 'medium':
-            return score >= 50 && score < 70;
-          case 'low':
-            return score < 50;
-          default:
-            return true;
-        }
-      });
-    }
-    
-    setFilteredTokens(filtered);
-  }, [tokens, confidenceFilter]);
+    filteredTokens,
+    loading,
+    error,
+    displayTime,
+    newTokenIds,
+    confidenceFilter,
+    handleConfidenceFilterChange
+  } = useRecentTokensRedux();
+  
+  // État local pour le mode d'affichage USD/BTC
+  const [showUSD, setShowUSD] = useState(true);
+  // État local pour le prix BTC
+  const [usdPrice, setUsdPrice] = useState<number | null>(null);
+  // État pour les créateurs développés
+  const [expandedCreators, setExpandedCreators] = useState<Set<string>>(new Set());
+  // État pour les créateurs suivis
+  const [followedCreators, setFollowedCreators] = useState<string[]>([]);
 
   // Load followed creators from localStorage
   useEffect(() => {
@@ -350,7 +53,7 @@ export function RecentTokens() {
       window.removeEventListener('storage', updateFollowedCreators)
       window.removeEventListener('followStatusChanged', updateFollowedCreators)
     }
-  }, [])
+  }, []);
 
   // Check if a creator is followed
   const isCreatorFollowed = (principal: string): boolean => {
@@ -444,6 +147,15 @@ export function RecentTokens() {
     }
   }
 
+  // Fetch BTC price for USD conversion
+  useEffect(() => {
+    const fetchBTCPrice = async () => {
+      const price = await getBTCPrice()
+      setUsdPrice(price)
+    }
+    fetchBTCPrice()
+  }, []);
+
   // Format token volume display
   const formatTokenVolumeDisplay = (volume: number) => {
     if (showUSD && usdPrice) {
@@ -480,27 +192,6 @@ export function RecentTokens() {
     }
   };
 
-  // Format the last updated time with seconds
-  const formatLastUpdated = (date: Date) => {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffSecs = Math.floor(diffMs / 1000);
-    
-    if (diffSecs < 60) return `${diffSecs} seconds ago`;
-    
-    const diffMins = Math.floor(diffSecs / 60);
-    if (diffMins === 1) return '1 minute ago';
-    if (diffMins < 60) return `${diffMins} minutes ago`;
-    
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours === 1) return '1 hour ago';
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays === 1) return 'Yesterday';
-    return `${diffDays} days ago`;
-  };
-
   // Get confidence score color class based on score
   const getRarityColor = (score: number): string => {
     if (score >= 100) return 'legendary';   // Gold - only perfect 100%
@@ -513,7 +204,6 @@ export function RecentTokens() {
     return 'scam';                          // Red
   };
   
-
   // Toggle expanded creator
   const toggleExpandCreator = (principal: string, tokenId: string) => {
     const uniqueId = `${principal}-${tokenId}`;
@@ -522,144 +212,12 @@ export function RecentTokens() {
       if (newSet.has(uniqueId)) {
         newSet.delete(uniqueId);
       } else {
-        newSet.add(uniqueId);
+        // Create a new set with only this expanded creator
+        return new Set([uniqueId]);
       }
       return newSet;
     });
   };
-
-
-
-  // Fetch BTC price for USD conversion
-  useEffect(() => {
-    const fetchBTCPrice = async () => {
-      // getBTCPrice now returns a fixed value without errors
-      const price = await getBTCPrice()
-      setUsdPrice(price)
-    }
-    fetchBTCPrice()
-  }, [])
-
-  // Helper function to filter tokens by confidence level
-  const filterTokensByConfidence = (tokens: TokenWithCreator[], confidenceFilter: string): TokenWithCreator[] => {
-    if (confidenceFilter === 'all') {
-      return tokens;
-    }
-    
-    return tokens.filter(({ creator }) => {
-      if (!creator) return false;
-      
-      const score = creator.confidenceScore;
-      
-      switch (confidenceFilter) {
-        case 'legendary':
-          return score >= 90;
-        case 'high':
-          return score >= 70 && score < 90;
-        case 'medium':
-          return score >= 50 && score < 70;
-        case 'low':
-          return score < 50;
-        default:
-          return true;
-      }
-    });
-  }
-
-  // Add hook for useTokenHolderData to directly use React Query for token holder data
-  const refreshTokenHolderCounts = async (tokensToUpdate: TokenWithCreator[]) => {
-    if (tokensToUpdate.length === 0) return;
-    
-    try {
-      console.log('Refreshing token holder counts...');
-      
-      // Create a copy of the current tokens
-      const updatedTokens = [...tokensToUpdate];
-      let hasChanges = false;
-      
-      // Update holder counts for the displayed tokens
-      const holderUpdatePromises = updatedTokens.map(async (tokenItem, index) => {
-        const tokenId = tokenItem.token.id;
-        
-        try {
-          // Get fresh holder data
-          const holderData = await getTokenHolderData(tokenId);
-          
-          // Check if holder count has changed
-          if (holderData.holder_count !== tokenItem.token.holder_count) {
-            hasChanges = true;
-            
-            // Update the token with new holder data
-            updatedTokens[index] = {
-              ...tokenItem,
-              token: {
-                ...tokenItem.token,
-                holder_count: holderData.holder_count,
-                holder_top: holderData.holder_top,
-                holder_dev: holderData.holder_dev
-              }
-            };
-          }
-        } catch (error) {
-          console.error(`Error updating holder count for token ${tokenId}:`, error);
-        }
-      });
-      
-      // Wait for all updates to complete
-      await Promise.all(holderUpdatePromises);
-      
-      // Only update state if holder counts have changed
-      if (hasChanges) {
-        setTokens(updatedTokens);
-        setFilteredTokens(filterTokensByConfidence(updatedTokens, confidenceFilter));
-        setLastUpdated(new Date());
-      }
-    } catch (err) {
-      console.error('Error refreshing holder counts:', err);
-    }
-  };
-
-  // Add new effect for refreshing holder counts for displayed tokens with different intervals
-  useEffect(() => {
-    if (tokens.length === 0) return;
-    
-    // Define separate intervals for newest and older tokens
-    // For newest tokens (first 4) - refresh every 10 seconds
-    const newestTokensInterval = setInterval(() => {
-      // Extract the newest tokens (first 4)
-      const newestTokensToUpdate = tokens.slice(0, 4);
-      refreshTokenHolderCounts(newestTokensToUpdate);
-    }, 10000); // 10 seconds
-    
-    // For older tokens (5+) - refresh every 60 seconds
-    const olderTokensInterval = setInterval(() => {
-      // Extract the older tokens (5+)
-      const olderTokensToUpdate = tokens.slice(4);
-      refreshTokenHolderCounts(olderTokensToUpdate);
-    }, 60000); // 60 seconds
-    
-    return () => {
-      clearInterval(newestTokensInterval);
-      clearInterval(olderTokensInterval);
-    };
-  }, [tokens, confidenceFilter]);
-
-  // Add effect to update the "Last updated" display every second
-  useEffect(() => {
-    if (!lastUpdated) return;
-    
-    // Initial format
-    setDisplayTime(formatLastUpdated(lastUpdated));
-    
-    // Update the time display every second
-    const timeDisplayInterval = setInterval(() => {
-      if (lastUpdated) {
-        setDisplayTime(formatLastUpdated(lastUpdated));
-      }
-    }, 1000);
-    
-    return () => clearInterval(timeDisplayInterval);
-  }, [lastUpdated]);
 
   return (
     <div className="recent-tokens-container">
@@ -674,14 +232,14 @@ export function RecentTokens() {
         <div className="dashboard-actions">
           <div className="dashboard-actions-left">
             <span className="last-updated">
-              {lastUpdated ? `Last updated: ${displayTime}` : ''}
+              {displayTime ? `Last updated: ${displayTime}` : ''}
             </span>
             <div className="confidence-filter">
               <label htmlFor="confidence-filter">Filter by confidence:</label>
               <select 
                 id="confidence-filter" 
                 value={confidenceFilter}
-                onChange={(e) => setConfidenceFilter(e.target.value)}
+                onChange={(e) => handleConfidenceFilterChange(e.target.value)}
                 className="confidence-select"
               >
                 <option value="all">All Developers</option>
@@ -722,7 +280,7 @@ export function RecentTokens() {
             {filteredTokens.map(({ token, creator }) => (
               <div 
                 key={token.id} 
-                className={`creator-card ${expandedCreators.has(`${creator?.principal}-${token.id}`) ? 'expanded' : ''} ${newTokenIds.has(token.id) ? 'new-token-highlight' : ''}`}
+                className={`creator-card ${expandedCreators.has(`${creator?.principal}-${token.id}`) ? 'expanded' : ''} ${newTokenIds.includes(token.id) ? 'new-token-highlight' : ''}`}
               >
                 <div className="creator-header" 
                   onClick={() => window.open(`https://odin.fun/token/${token.id}`, '_blank')}
@@ -756,7 +314,7 @@ export function RecentTokens() {
                       <div className="creator-metrics">
                         <div className="token-price">
                           <span className="metric-label">Price:</span> 
-                          <span>{formatPrice(token.price)}</span>
+                          <span>{(token.price_in_sats || 0).toFixed(3)} sats</span>
                         </div>
                         <div className="token-created">
                           <span className="metric-label">Created:</span> 
@@ -805,7 +363,7 @@ export function RecentTokens() {
                             title="Telegram"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                              <path fill-rule="evenodd" clip-rule="evenodd" d="M24 12C24 18.6274 18.6274 24 12 24C5.37258 24 0 18.6274 0 12C0 5.37258 5.37258 0 12 0C18.6274 0 24 5.37258 24 12ZM12.43 8.85893C11.2629 9.3444 8.93014 10.3492 5.43188 11.8733C4.85235 12.0992 4.55322 12.3202 4.53451 12.5363C4.50219 12.9015 4.96728 13.0453 5.57856 13.2423C5.6783 13.2736 5.78218 13.3058 5.88934 13.3408C6.48936 13.5411 7.27897 13.7749 7.68124 13.7861C8.04969 13.7964 8.46004 13.6466 8.91229 13.3367C12.2111 11.1125 13.9234 9.99271 14.0491 9.97718C14.1401 9.96621 14.2643 9.95172 14.3501 10.0312C14.4358 10.1108 14.4277 10.2542 14.4189 10.2926C14.3716 10.5178 12.5282 12.1981 11.5717 13.0879C11.2758 13.3698 11.0606 13.5733 11.0169 13.6191C10.9217 13.7186 10.8243 13.8138 10.7303 13.9056C10.1535 14.4698 9.71735 14.8981 10.7571 15.5767C11.2877 15.9165 11.7101 16.1999 12.131 16.4825C12.595 16.7921 13.0571 17.1007 13.6443 17.4853C13.7943 17.5814 13.9382 17.6819 14.0784 17.7799C14.5882 18.1398 15.0431 18.4606 15.5964 18.4122C15.9205 18.3826 16.2554 18.081 16.4257 17.1719C16.8936 14.7446 17.8152 9.56185 18.0277 7.4455C18.0414 7.27425 18.0304 7.10235 18.0039 6.93403C17.9846 6.8127 17.9225 6.70177 17.8302 6.62195C17.6904 6.509 17.4942 6.48658 17.4075 6.48871C17.0134 6.4978 16.418 6.70653 12.43 8.85893Z" />
+                              <path fillRule="evenodd" clipRule="evenodd" d="M24 12C24 18.6274 18.6274 24 12 24C5.37258 24 0 18.6274 0 12C0 5.37258 5.37258 0 12 0C18.6274 0 24 5.37258 24 12ZM12.43 8.85893C11.2629 9.3444 8.93014 10.3492 5.43188 11.8733C4.85235 12.0992 4.55322 12.3202 4.53451 12.5363C4.50219 12.9015 4.96728 13.0453 5.57856 13.2423C5.6783 13.2736 5.78218 13.3058 5.88934 13.3408C6.48936 13.5411 7.27897 13.7749 7.68124 13.7861C8.04969 13.7964 8.46004 13.6466 8.91229 13.3367C12.2111 11.1125 13.9234 9.99271 14.0491 9.97718C14.1401 9.96621 14.2643 9.95172 14.3501 10.0312C14.4358 10.1108 14.4277 10.2542 14.4189 10.2926C14.3716 10.5178 12.5282 12.1981 11.5717 13.0879C11.2758 13.3698 11.0606 13.5733 11.0169 13.6191C10.9217 13.7186 10.8243 13.8138 10.7303 13.9056C10.1535 14.4698 9.71735 14.8981 10.7571 15.5767C11.2877 15.9165 11.7101 16.1999 12.131 16.4825C12.595 16.7921 13.0571 17.1007 13.6443 17.4853C13.7943 17.5814 13.9382 17.6819 14.0784 17.7799C14.5882 18.1398 15.0431 18.4606 15.5964 18.4122C15.9205 18.3826 16.2554 18.081 16.4257 17.1719C16.8936 14.7446 17.8152 9.56185 18.0277 7.4455C18.0414 7.27425 18.0304 7.10235 18.0039 6.93403C17.9846 6.8127 17.9225 6.70177 17.8302 6.62195C17.6904 6.509 17.4942 6.48658 17.4075 6.48871C17.0134 6.4978 16.418 6.70653 12.43 8.85893Z" />
                             </svg>
                           </a>
                         )}
@@ -895,13 +453,13 @@ export function RecentTokens() {
                           .slice()
                           .sort((a, b) => b.marketcap - a.marketcap)
                           .slice(0, 6)
-                          .map(tok => {
+                          .map((tok, index) => {
                           // Use the is_active property directly
                           const shouldShowInactiveTag = !tok.is_active;
                           
                           return (
                             <div 
-                              key={tok.id} 
+                              key={`${creator.principal}-${tok.id}-${index}`} 
                               className={`token-item ${tok.is_active ? 'active' : 'inactive'}`}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -938,7 +496,7 @@ export function RecentTokens() {
                                   </div>
                                 </div>
                                 <div className="token-price-container">
-                                  <div className="token-price-small">{formatPrice(tok.price)}</div>
+                                  <div className="token-price-small">{(tok.price_in_sats || 0).toFixed(3)} sats</div>
                                 </div>
                               </div>
                               

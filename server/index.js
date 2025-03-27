@@ -311,11 +311,27 @@ app.get('/api/newest-tokens', async (req, res) => {
 // Add route for older recent tokens (5-30)
 app.get('/api/older-recent-tokens', async (req, res) => {
   try {
-    const { limit = 26 } = req.query;
-    const cacheKey = `older_recent_tokens_${limit}`;
-    const apiUrl = `${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=2&limit=${limit}`;
+    const { limit = 26, offset = 4 } = req.query;
+    const cacheKey = `older_recent_tokens_${limit}_${offset}`;
+    
+    // Use page parameter based on offset
+    const page = Math.floor(offset / 20) + 1;
+    // Calculate the remaining offset within the page
+    const pageOffset = parseInt(offset) % 20;
+    
+    // Construct API URL with appropriate page and offset
+    const apiUrl = `${API_BASE_URL}/tokens?sort=created_time%3Adesc&page=${page}&limit=${parseInt(limit) + pageOffset}&offset=${pageOffset}`;
+    
+    console.log(`Fetching older recent tokens with limit ${limit}, offset ${offset}, page ${page}, pageOffset ${pageOffset}`);
     
     const data = await getCachedOrFetch(cacheKey, apiUrl, CACHE_EXPIRY.OLDER_RECENT_TOKENS);
+    
+    // If we fetched with an offset within the page, slice the response to remove the offset items
+    if (pageOffset > 0 && data.data && data.data.length > pageOffset) {
+      data.data = data.data.slice(pageOffset);
+    }
+    
+    console.log(`Returning ${data.data?.length || 0} older recent tokens`);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });

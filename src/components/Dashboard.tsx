@@ -1,5 +1,5 @@
 import { useState, useEffect, ChangeEvent, useContext, useRef } from 'react'
-import { findTopCreators, CreatorPerformance, CreatorSortOption } from '../services/api'
+import { CreatorPerformance, CreatorSortOption } from '../services/api'
 import CreatorCard from './CreatorCard'
 import { PreloadContext } from '../App'
 import { useTopCreators } from '../hooks/useTokenQueries'
@@ -26,7 +26,6 @@ export function Dashboard() {
   const [totalPages, setTotalPages] = useState(1)
   const [silentlyUpdating, setSilentlyUpdating] = useState(false)
   
-  // Référence pour suivre l'état de tri précédent - DÉPLACÉ ICI AU NIVEAU RACINE
   const sortRefState = useRef({
     sortBy: "",
     sortDirection: "",
@@ -59,7 +58,8 @@ export function Dashboard() {
       setSilentlyUpdating(false);
       setLoading(false);
     }
-  }, [creators, dataUpdatedAt, updateDashboardData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creators, dataUpdatedAt]);
 
   // Handle query errors
   useEffect(() => {
@@ -71,6 +71,7 @@ export function Dashboard() {
       setSilentlyUpdating(false);
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryError, preloadedData]);
 
   // Use preloaded data if available
@@ -89,6 +90,7 @@ export function Dashboard() {
         silentlyLoadData()
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps - silentlyLoadData intentionally omitted to avoid infinite loops
   }, [preloadedData, lastDashboardUpdate, sortDirection, sortBy, silentlyUpdating])
 
   // Update creators when React Query data changes
@@ -104,6 +106,7 @@ export function Dashboard() {
         }
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creators, dataUpdatedAt, sortDirection, sortBy, preloadedData])
 
   // Method to silently load data without showing loading state
@@ -116,18 +119,14 @@ export function Dashboard() {
 
   // Sort creators when sortBy, sortDirection, or creators change
   useEffect(() => {
-    // Éviter le traitement si nous n'avons pas de données
     if (!((preloadedData && preloadedData.length > 0) || (creators && creators.length > 0))) {
       return;
     }
     
-    // Utiliser la référence déclarée au niveau racine
-    
-    // Créer un hash simple des données actuelles pour détecter les changements
+
     const dataToSort = creators.length > 0 ? creators : preloadedData;
     const dataHash = dataToSort.map(c => c.principal).join('-');
     
-    // Ne trier que si quelque chose a changé
     if (sortRefState.current.sortBy === sortBy && 
         sortRefState.current.sortDirection === sortDirection && 
         sortRefState.current.dataHash === dataHash) {
@@ -148,6 +147,7 @@ export function Dashboard() {
     }, 100);
     
     return () => clearTimeout(sortTimer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortBy, sortDirection, creators, preloadedData]);
 
   // Update displayed creators when search query changes
@@ -164,11 +164,13 @@ export function Dashboard() {
     }, 150);
     
     return () => clearTimeout(searchTimer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, displayedCreators]);
 
   // Update paginated creators when displayedCreators or currentPage changes
   useEffect(() => {
     updatePaginatedCreators()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedCreators, currentPage, creatorsPerPage])
 
   // Add effect to refresh the "Last updated" display every minute

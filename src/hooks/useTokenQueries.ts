@@ -17,35 +17,46 @@ export const useNewestTokens = (options?: any) => {
   return useQuery({
     queryKey: ['newest-tokens'],
     queryFn: getNewestTokens,
-    staleTime: 10000, // 10 seconds - refresh every 10s
+    staleTime: 5000, // 5 seconds - consider data stale quickly
     refetchInterval: 10000, // 10 seconds between refetch
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    cacheTime: 15000, // Only cache for 15 seconds to ensure fresh data on next fetch
+    retry: 3, // Retry 3 times if the request fails
     ...options
   });
 };
 
-// Hook for older recent tokens
-export const useOlderRecentTokens = (limit = 26, options?: any) => {
+// Hook for older recent tokens (excluding the newest 4 tokens)
+export const useOlderRecentTokens = (limit = 16, options?: any) => {
   return useQuery({
     queryKey: ['older-recent-tokens', limit],
-    queryFn: () => getOlderRecentTokens(limit),
-    staleTime: 60000, // 1 minute
-    refetchInterval: 60000, // 1 minute between refetch
+    // Modified to explicitly request tokens 5+ (after the newest 4)
+    queryFn: () => getOlderRecentTokens(limit, 4), // Skip the first 4 tokens
+    staleTime: 15000, // 15 seconds - consider data stale faster
+    refetchInterval: 30000, // 30 seconds between refetch
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    cacheTime: 30000, // Only cache for 30 seconds to ensure fresh data on next fetch
+    retry: 3, // Retry 3 times if the request fails
     ...options
   });
 };
 
 // Hook for top creators
 export const useTopCreators = (
-  limit = 200,
+  limit = 100,
   sortBy: CreatorSortOption = 'confidence',
   forceRefresh = false,
   options?: any
 ) => {
   return useQuery({
     queryKey: ['top-creators', limit, sortBy, forceRefresh],
-    queryFn: () => findTopCreators(limit, sortBy, forceRefresh),
-    staleTime: 300000, // 5 minutes - longer stale time for top creators
-    refetchInterval: 300000, // 5 minutes between refetch
+    queryFn: () => findTopCreators(limit, sortBy, forceRefresh, 125), // 125 tokens pour extraire 100 devs uniques
+    staleTime: 5400000, // 90 minutes - longer stale time for top creators
+    refetchInterval: 5400000, // 90 minutes between refetch
     ...options
   });
 };

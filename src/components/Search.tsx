@@ -283,7 +283,7 @@ function Search() {
                     </div>
                   </div>
                   <div className="token-price-section">
-                    <div className="token-price">{token.price_in_sats || 0} sats</div>
+                    <div className="token-price">{(token.price_in_sats || 0).toFixed(3)} sats</div>
                     <div className="token-price-change">
                       {token.price_change_24h !== undefined ? (
                         <span className={token.price_change_24h >= 0 ? 'price-up' : 'price-down'}>
