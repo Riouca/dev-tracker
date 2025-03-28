@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { getNewestTokens, getOlderRecentTokens, calculateCreatorPerformance, Token as ApiToken, CreatorPerformance } from '../../services/api';
 
-interface TokenWithCreator {
+export interface TokenWithCreator {
   token: ApiToken;
   creator: CreatorPerformance | null;
 }

@@ -1,16 +1,18 @@
-import { useState, createContext, useEffect } from 'react'
+import { useState, createContext, useEffect, lazy, Suspense } from 'react'
 import Header from './components/Header'
 import Footer from './components/Footer'
-import { Dashboard } from './components/Dashboard'
-import { RecentTokens } from './components/RecentTokens'
-import { Favorites } from './components/Favorites'
-import Search from './components/Search'
 import { Token, CreatorPerformance, processTokensIntoCreators, processTokens } from './services/api'
 import './App.css'
 import {
   QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query'
+
+// Lazy load components
+const Dashboard = lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
+const RecentTokens = lazy(() => import('./components/RecentTokens').then(module => ({ default: module.RecentTokens })));
+const Favorites = lazy(() => import('./components/Favorites').then(module => ({ default: module.Favorites })));
+const Search = lazy(() => import('./components/Search'));
 
 // Type for page navigation - match Header component
 type Page = 'dashboard' | 'recent' | 'search' | 'favorites'
@@ -53,6 +55,14 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// Composant de loading pour Suspense
+const LoadingFallback = () => (
+  <div className="app-loading">
+    <div className="loading-spinner"></div>
+    <p>Loading...</p>
+  </div>
+);
 
 // Fonction pour récupérer les données précachées du serveur Redis
 async function fetchCachedData() {
@@ -173,10 +183,12 @@ function App() {
           />
           
           <main>
-            {currentPage === 'dashboard' && <Dashboard />}
-            {currentPage === 'recent' && <RecentTokens />}
-            {currentPage === 'search' && <Search />}
-            {currentPage === 'favorites' && <Favorites />}
+            <Suspense fallback={<LoadingFallback />}>
+              {currentPage === 'dashboard' && <Dashboard />}
+              {currentPage === 'recent' && <RecentTokens />}
+              {currentPage === 'search' && <Search />}
+              {currentPage === 'favorites' && <Favorites />}
+            </Suspense>
           </main>
           
           <Footer />

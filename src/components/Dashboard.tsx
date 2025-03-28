@@ -4,6 +4,27 @@ import CreatorCard from './CreatorCard'
 import { PreloadContext } from '../App'
 import { useTopCreators } from '../hooks/useTokenQueries'
 
+// Composant de squelette pour la carte creator
+const CreatorCardSkeleton = () => (
+  <div className="creator-card skeleton-card">
+    <div className="skeleton-header">
+      <div className="skeleton-avatar"></div>
+      <div className="skeleton-content">
+        <div className="skeleton-line long"></div>
+        <div className="skeleton-line medium"></div>
+      </div>
+    </div>
+    <div className="skeleton-stats">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="skeleton-stat">
+          <div className="skeleton-line short"></div>
+          <div className="skeleton-line medium"></div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 export function Dashboard() {
   // Context for preloaded data
   const { dashboardData: preloadedData, updateDashboardData, lastDashboardUpdate } = useContext(PreloadContext)
@@ -26,7 +47,7 @@ export function Dashboard() {
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
-  const [creatorsPerPage, setCreatorsPerPage] = useState(20)
+  const [creatorsPerPage, setCreatorsPerPage] = useState(20) // Initialement 20
   const [paginatedCreators, setPaginatedCreators] = useState<CreatorPerformance[]>([])
   const [totalPages, setTotalPages] = useState(1)
   const [silentlyUpdating, setSilentlyUpdating] = useState(false)
@@ -46,6 +67,8 @@ export function Dashboard() {
   } = useTopCreators(100, sortBy, false, {
     // Only fetch if no preloaded data
     enabled: !preloadedData || preloadedData.length === 0,
+    retry: 3, // Augmenter le nombre de tentatives
+    refetchOnWindowFocus: false, // Éviter les rechargements inutiles
   });
 
   // Cast data to proper type
@@ -55,7 +78,20 @@ export function Dashboard() {
   useEffect(() => {
     if (creators && creators.length > 0) {
       // Filter out creators with no username
-      const validData = creators.filter(creator => creator.username);
+      const validData = creators.filter(creator => creator.username && 
+        creator.principal && 
+        creator.confidenceScore !== undefined);
+        
+      // Vérifier que les données sont valides et complètes
+      if (validData.length < creators.length * 0.8) {
+        console.warn(`Received ${creators.length} creators but only ${validData.length} are valid`);
+        // Ne pas mettre à jour si trop de données sont invalides
+        if (preloadedData && preloadedData.length > validData.length) {
+          console.warn("Keeping preloaded data as they are more complete");
+          return;
+        }
+      }
+      
       // Update context for other components
       updateDashboardData(validData);
       // Update last updated time
@@ -218,61 +254,74 @@ export function Dashboard() {
   }
 
   const sortCreators = (creatorsToSort: CreatorPerformance[], direction: 'asc' | 'desc' = 'desc', sortOption: CreatorSortOption) => {
-    let sortedCreators = [...creatorsToSort]
+    if (!creatorsToSort || creatorsToSort.length === 0) {
+      console.warn("Attempted to sort empty creator list");
+      return [];
+    }
     
-    sortedCreators.sort((a, b) => {
-      let result = 0
+    let sortedCreators = [...creatorsToSort];
+    
+    try {
+      sortedCreators.sort((a, b) => {
+        let result = 0;
+        
+        // Vérification de sécurité pour les données manquantes
+        if (!a || !b) return 0;
+        
+        // Sort by the selected option
+        switch (sortOption) {
+          case 'tokens':
+            result = (b.totalTokens || 0) - (a.totalTokens || 0);
+            break;
+          case 'active':
+            result = (b.activeTokens || 0) - (a.activeTokens || 0);
+            break;
+          case 'volume':
+            result = (b.totalVolume || 0) - (a.totalVolume || 0);
+            break;
+          case 'success':
+            result = (b.successRate || 0) - (a.successRate || 0);
+            break;
+          case 'weighted':
+            result = (b.weightedScore || 0) - (a.weightedScore || 0);
+            break;
+          case 'confidence':
+            result = (b.confidenceScore || 0) - (a.confidenceScore || 0);
+            // If confidence scores are equal, sort by marketcap as secondary criterion
+            if (result === 0) {
+              result = (b.totalMarketcap || 0) - (a.totalMarketcap || 0);
+            }
+            break;
+          case 'holders':
+            const aHolders = a.totalHolders || 0;
+            const bHolders = b.totalHolders || 0;
+            result = bHolders - aHolders;
+            break;
+          default:
+            result = (b.confidenceScore || 0) - (a.confidenceScore || 0);
+            // If confidence scores are equal, sort by marketcap as secondary criterion
+            if (result === 0) {
+              result = (b.totalMarketcap || 0) - (a.totalMarketcap || 0);
+            }
+        }
+        
+        // Reverse the result if ascending order is requested
+        return direction === 'asc' ? -result : result;
+      });
       
-      // Sort by the selected option
-      switch (sortOption) {
-        case 'tokens':
-          result = b.totalTokens - a.totalTokens
-          break
-        case 'active':
-          result = b.activeTokens - a.activeTokens
-          break
-        case 'volume':
-          result = b.totalVolume - a.totalVolume
-          break
-        case 'success':
-          result = b.successRate - a.successRate
-          break
-        case 'weighted':
-          result = b.weightedScore - a.weightedScore
-          break
-        case 'confidence':
-          result = b.confidenceScore - a.confidenceScore
-          // If confidence scores are equal, sort by marketcap as secondary criterion
-          if (result === 0) {
-            result = b.totalMarketcap - a.totalMarketcap
-          }
-          break
-        case 'holders':
-          const aHolders = a.totalHolders || 0
-          const bHolders = b.totalHolders || 0
-          result = bHolders - aHolders
-          break
-        default:
-          result = b.confidenceScore - a.confidenceScore // Default: confidence score
-          // If confidence scores are equal, sort by marketcap as secondary criterion
-          if (result === 0) {
-            result = b.totalMarketcap - a.totalMarketcap
-          }
-      }
+      console.log(`Sorted ${sortedCreators.length} creators by ${sortOption} in ${direction} order`);
       
-      // Reverse the result if ascending order is requested
-      return direction === 'asc' ? -result : result
-    })
-    
-    console.log(`Sorted ${sortedCreators.length} creators by ${sortOption} in ${direction} order`)
-    
-    // Update ranks after sorting
-    sortedCreators = sortedCreators.map((creator, index) => ({
-      ...creator,
-      rank: index + 1
-    }))
-    
-    return sortedCreators
+      // Update ranks after sorting
+      sortedCreators = sortedCreators.map((creator, index) => ({
+        ...creator,
+        rank: index + 1
+      }));
+      
+      return sortedCreators;
+    } catch (error) {
+      console.error("Error sorting creators:", error);
+      return creatorsToSort; // En cas d'erreur, retourner la liste non triée
+    }
   }
 
   const filterCreators = () => {
@@ -302,12 +351,25 @@ export function Dashboard() {
   }
 
   const updatePaginatedCreators = () => {
-    const indexOfLastCreator = currentPage * creatorsPerPage
-    const indexOfFirstCreator = indexOfLastCreator - creatorsPerPage
-    const currentCreators = displayedCreators.slice(indexOfFirstCreator, indexOfLastCreator)
+    if (!displayedCreators || displayedCreators.length === 0) {
+      setPaginatedCreators([]);
+      setTotalPages(0);
+      return;
+    }
     
-    setPaginatedCreators(currentCreators)
-    setTotalPages(Math.ceil(displayedCreators.length / creatorsPerPage))
+    try {
+      const indexOfLastCreator = currentPage * creatorsPerPage;
+      const indexOfFirstCreator = indexOfLastCreator - creatorsPerPage;
+      const currentCreators = displayedCreators.slice(indexOfFirstCreator, indexOfLastCreator);
+      
+      setPaginatedCreators(currentCreators);
+      setTotalPages(Math.ceil(displayedCreators.length / creatorsPerPage));
+    } catch (error) {
+      console.error("Error updating paginated creators:", error);
+      // En cas d'erreur, définir une liste vide
+      setPaginatedCreators([]);
+      setTotalPages(0);
+    }
   }
 
   const handleSortChange = (newSortBy: CreatorSortOption) => {
@@ -512,16 +574,17 @@ export function Dashboard() {
       </div>
       
       {showLoading ? (
-        <div className="loading">
-          <div className="loading-spinner"></div>
-          <p className="loading-text">Loading developers...</p>
+        <div className="creator-list">
+          {[...Array(6)].map((_, i) => (
+            <CreatorCardSkeleton key={i} />
+          ))}
         </div>
       ) : showError ? (
         <div className="error">
           <p>{error || 'Failed to load creators. Please try again later.'}</p>
           <p>Maybe you are rate limited, wait a bit</p>
         </div>
-      ) : displayedCreators.length === 0 ? (
+      ) : (!displayedCreators.length && !paginatedCreators.length && !loading) ? (
         <div className="empty-state">
           <p>No developers found matching your search criteria.</p>
           <p>Try adjusting your search.</p>
@@ -529,12 +592,19 @@ export function Dashboard() {
       ) : (
         <>
           <div className="creator-list">
-            {paginatedCreators.map((creator) => (
-              <CreatorCard 
-                key={creator.principal} 
-                creator={creator}
-              />
-            ))}
+            {paginatedCreators.length > 0 ? (
+              paginatedCreators.map((creator) => (
+                <CreatorCard 
+                  key={creator.principal} 
+                  creator={creator}
+                />
+              ))
+            ) : (
+              // Afficher un fallback de skeletons si paginatedCreators est vide mais pas en état d'erreur
+              [...Array(6)].map((_, i) => (
+                <CreatorCardSkeleton key={`fallback-${i}`} />
+              ))
+            )}
           </div>
           
           {renderPagination()}

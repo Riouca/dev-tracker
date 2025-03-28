@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   getNewestTokens, 
   getOlderRecentTokens, 
@@ -8,6 +8,7 @@ import {
   getTokenHolderData,
   getToken
 } from '../services/api';
+import { useEffect } from 'react';
 
 // Hook for newest tokens
 export const useNewestTokens = (options?: any) => {
@@ -42,14 +43,16 @@ export const useOlderRecentTokens = (limit = 16, options?: any) => {
   });
 };
 
-// Hook for top creators
+// Hook for top creators - initialement 50 au lieu de 100, puis chargement en background
 export const useTopCreators = (
-  limit = 100,
+  limit = 50, // Initialement 50 au lieu de 100
   sortBy: CreatorSortOption = 'confidence',
   forceRefresh = false,
   options?: any
 ) => {
-  return useQuery({
+  const queryClient = useQueryClient();
+  
+  const query = useQuery({
     queryKey: ['top-creators', limit, sortBy, forceRefresh],
     queryFn: () => findTopCreators(limit, sortBy, forceRefresh, 125), // 125 tokens pour extraire 100 devs uniques
     staleTime: 14400000, // 4 heures - aligned with Redis cache expiry (3 hours + margin)
@@ -59,6 +62,21 @@ export const useTopCreators = (
     refetchOnMount: false, // Don't refetch on mount to avoid unwanted API calls
     ...options
   });
+  
+  // Charger 100 creators en arrière-plan après le chargement initial réussi
+  useEffect(() => {
+    if (query.data && Array.isArray(query.data) && query.data.length > 0 && limit < 100) {
+      console.log('Loading more creators (100) in background');
+      setTimeout(() => {
+        queryClient.prefetchQuery({
+          queryKey: ['top-creators', 100, sortBy, forceRefresh],
+          queryFn: () => findTopCreators(100, sortBy, forceRefresh, 125),
+        });
+      }, 2000);
+    }
+  }, [query.data, limit, sortBy, forceRefresh, queryClient]);
+  
+  return query;
 };
 
 // Hook for a single creator's performance

@@ -10,6 +10,27 @@ import {
 import { formatNumber, getTimeSince, formatDeveloperHoldings } from '../utils/formatters'
 import { useRecentTokensRedux } from '../hooks/useRecentTokensRedux'
 
+// Composant de squelette pour les tokens récents
+const TokenCardSkeleton = () => (
+  <div className="creator-card skeleton-card">
+    <div className="skeleton-header">
+      <div className="skeleton-avatar"></div>
+      <div className="skeleton-content">
+        <div className="skeleton-line long"></div>
+        <div className="skeleton-line medium"></div>
+      </div>
+    </div>
+    <div className="skeleton-stats">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="skeleton-stat">
+          <div className="skeleton-line short"></div>
+          <div className="skeleton-line medium"></div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 export function RecentTokens() {
   // Utiliser notre hook Redux personnalisé
   const {
@@ -18,7 +39,7 @@ export function RecentTokens() {
     error,
     newTokenIds,
     confidenceFilter,
-    handleConfidenceFilterChange
+    handleConfidenceFilterChange,
   } = useRecentTokensRedux();
   
   // État local pour le mode d'affichage USD/BTC
@@ -260,9 +281,10 @@ export function RecentTokens() {
         </div>
         
         {loading && filteredTokens.length === 0 ? (
-          <div className="loading">
-            <div className="loading-spinner"></div>
-            <p>Loading recent tokens...</p>
+          <div className="creator-list">
+            {[...Array(6)].map((_, i) => (
+              <TokenCardSkeleton key={i} />
+            ))}
           </div>
         ) : error ? (
           <div className="error">

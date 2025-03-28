@@ -26,7 +26,8 @@
     "react-dom": "^19.0.0",
     "react-redux": "^9.2.0",
     "react-router-dom": "^7.3.0",
-    "redis": "^4.7.0"
+    "redis": "^4.7.0",
+    "reselect": "^5.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
