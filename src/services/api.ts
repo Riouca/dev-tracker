@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-// Use the proxy server - use relative URL instead of hardcoding localhost for production
+// Use the proxy server
 const PROXY_BASE_URL = '/api';
 const API_BASE_URL = 'https://api.odin.fun/v1';
 

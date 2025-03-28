@@ -70,7 +70,7 @@ async function fetchCachedData() {
 
 function App() {
   // State for current page
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard')
+  const [currentPage, setCurrentPage] = useState<Page>('recent')
   
   // Preloaded data context
   const [dashboardData, setDashboardData] = useState<CreatorPerformance[]>([])

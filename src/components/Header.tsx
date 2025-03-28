@@ -161,17 +161,17 @@ function Header({ currentPage, onPageChange }: HeaderProps) {
               <div className="metrics-list">
                 <div className="metric-item">
                   <div className="metric-header">
-                    <span className="metric-name">Leaderboard</span>
-                    <span className="metric-weight">🏆</span>
-                  </div>
-                  <p>Discover the most reliable token creators ranked by their confidence scores. Find developers with proven track records and make informed investment decisions.</p>
-                </div>
-                <div className="metric-item">
-                  <div className="metric-header">
                     <span className="metric-name">Recent Tokens</span>
                     <span className="metric-weight">🕒</span>
                   </div>
                   <p>Stay ahead of the curve with real-time updates on newly launched tokens. Get in early by discovering promising projects as soon as they launch.</p>
+                </div>
+                <div className="metric-item">
+                  <div className="metric-header">
+                    <span className="metric-name">Leaderboard</span>
+                    <span className="metric-weight">🏆</span>
+                  </div>
+                  <p>Discover the most reliable token creators ranked by their confidence scores. Find developers with proven track records and make informed investment decisions.</p>
                 </div>
                 <div className="metric-item">
                   <div className="metric-header">
@@ -209,34 +209,34 @@ function Header({ currentPage, onPageChange }: HeaderProps) {
         </div>
         <nav className="main-nav">
           <button 
-            className={`nav-link ${currentPage === 'dashboard' ? 'active' : ''}`}
-            onClick={() => onPageChange('dashboard')}
-          >
-            🏆 Leaderboard
-          </button>
-          <button 
             className={`nav-link ${currentPage === 'recent' ? 'active' : ''}`}
             onClick={() => onPageChange('recent')}
           >
-            🕒 Recent Tokens
+            <span className="nav-emoji">🕒</span> <span className="nav-text">Recent Tokens</span>
+          </button>
+          <button 
+            className={`nav-link ${currentPage === 'dashboard' ? 'active' : ''}`}
+            onClick={() => onPageChange('dashboard')}
+          >
+            <span className="nav-emoji">🏆</span> <span className="nav-text">Leaderboard</span>
           </button>
           <button 
             className={`nav-link ${currentPage === 'search' ? 'active' : ''}`}
             onClick={() => onPageChange('search')}
           >
-            🔍 Search
+            <span className="nav-emoji">🔍</span> <span className="nav-text">Search</span>
           </button>
           <button 
             className={`nav-link ${currentPage === 'favorites' ? 'active' : ''}`}
             onClick={() => onPageChange('favorites')}
           >
-            ⭐ Favorites {followedCount > 0 && <span>({followedCount})</span>}
+            <span className="nav-emoji">⭐</span> <span className="nav-text">Favorites</span> {followedCount > 0 && <span>({followedCount})</span>}
           </button>
           <button 
             className="nav-link"
             onClick={toggleInfoModal}
           >
-            ❓ Guide
+            <span className="nav-emoji">❓</span> <span className="nav-text">Guide</span>
           </button>
         </nav>
       </div>

@@ -16,7 +16,6 @@ export function RecentTokens() {
     filteredTokens,
     loading,
     error,
-    displayTime,
     newTokenIds,
     confidenceFilter,
     handleConfidenceFilterChange
@@ -231,8 +230,8 @@ export function RecentTokens() {
         
         <div className="dashboard-actions">
           <div className="dashboard-actions-left">
-            <span className="last-updated">
-              {displayTime ? `Last updated: ${displayTime}` : ''}
+            <span className="live-data-indicator">
+              <span className="live-dot"></span> Live Data
             </span>
             <div className="confidence-filter">
               <label htmlFor="confidence-filter">Filter by confidence:</label>
@@ -454,73 +453,76 @@ export function RecentTokens() {
                           .sort((a, b) => b.marketcap - a.marketcap)
                           .slice(0, 6)
                           .map((tok, index) => {
-                          // Use the is_active property directly
-                          const shouldShowInactiveTag = !tok.is_active;
+                            // Si le token est le même que celui affiché dans la carte principale, 
+                            // utiliser les données du token principal pour garantir la cohérence
+                            const currentTokenData = tok.id === token.id ? token : tok;
+                            // Use the is_active property directly
+                            const shouldShowInactiveTag = !currentTokenData.is_active;
                           
-                          return (
-                            <div 
-                              key={`${creator.principal}-${tok.id}-${index}`} 
-                              className={`token-item ${tok.is_active ? 'active' : 'inactive'}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(`https://odin.fun/token/${tok.id}`, '_blank');
-                              }}
-                            >
-                              <div className="token-header-small">
-                                <div className="token-info">
-                                  <div className="token-image-small">
-                                    <img 
-                                      src={getTokenImageUrl(tok.id)} 
-                                      alt={tok.name} 
-                                      onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.onerror = null;
-                                        target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>';
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="token-name">
-                                    <div className="token-name-wrapper">
-                                      <span className="token-item-name">
-                                        {tok.name}
-                                      </span>
-                                      <span className="external-link-wrapper">
-                                        <svg className="external-link-icon small" xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                                          <polyline points="15 3 21 3 21 9"></polyline>
-                                          <line x1="10" y1="14" x2="21" y2="3"></line>
-                                        </svg>
-                                      </span>
+                            return (
+                              <div 
+                                key={`${creator.principal}-${currentTokenData.id}-${index}`} 
+                                className={`token-item ${currentTokenData.is_active ? 'active' : 'inactive'}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(`https://odin.fun/token/${currentTokenData.id}`, '_blank');
+                                }}
+                              >
+                                <div className="token-header-small">
+                                  <div className="token-info">
+                                    <div className="token-image-small">
+                                      <img 
+                                        src={getTokenImageUrl(currentTokenData.id)} 
+                                        alt={currentTokenData.name} 
+                                        onError={(e) => {
+                                          const target = e.target as HTMLImageElement;
+                                          target.onerror = null;
+                                          target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>';
+                                        }}
+                                      />
                                     </div>
-                                    {shouldShowInactiveTag && <span className="inactive-tag">Inactive</span>}
+                                    <div className="token-name">
+                                      <div className="token-name-wrapper">
+                                        <span className="token-item-name">
+                                          {currentTokenData.name}
+                                        </span>
+                                        <span className="external-link-wrapper">
+                                          <svg className="external-link-icon small" xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                            <polyline points="15 3 21 3 21 9"></polyline>
+                                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                                          </svg>
+                                        </span>
+                                      </div>
+                                      {shouldShowInactiveTag && <span className="inactive-tag">Inactive</span>}
+                                    </div>
+                                  </div>
+                                  <div className="token-price-container">
+                                    <div className="token-price-small">{(currentTokenData.price_in_sats || 0).toFixed(3)} sats</div>
                                   </div>
                                 </div>
-                                <div className="token-price-container">
-                                  <div className="token-price-small">{(tok.price_in_sats || 0).toFixed(3)} sats</div>
+                                
+                                <div className="token-stats">
+                                  <div className="token-stat">
+                                    <div className="stat-label">Volume</div>
+                                    <div className="stat-value">{formatTokenVolumeDisplay(currentTokenData.volume)}</div>
+                                  </div>
+                                  <div className="token-stat">
+                                    <div className="stat-label">Holders</div>
+                                    <div className="stat-value">{formatNumber(currentTokenData.holder_count)}</div>
+                                  </div>
+                                  <div className="token-stat">
+                                    <div className="stat-label">MCap</div>
+                                    <div className="stat-value">{formatTokenMarketcapDisplay(currentTokenData.marketcap)}</div>
+                                  </div>
+                                  <div className="token-stat">
+                                    <div className="stat-label">Txs</div>
+                                    <div className="stat-value">{formatNumber(currentTokenData.buy_count + currentTokenData.sell_count)}</div>
+                                  </div>
                                 </div>
                               </div>
-                              
-                              <div className="token-stats">
-                                <div className="token-stat">
-                                  <div className="stat-label">Volume</div>
-                                  <div className="stat-value">{formatTokenVolumeDisplay(tok.volume)}</div>
-                                </div>
-                                <div className="token-stat">
-                                  <div className="stat-label">Holders</div>
-                                  <div className="stat-value">{formatNumber(tok.holder_count)}</div>
-                                </div>
-                                <div className="token-stat">
-                                  <div className="stat-label">MCap</div>
-                                  <div className="stat-value">{formatTokenMarketcapDisplay(tok.marketcap)}</div>
-                                </div>
-                                <div className="token-stat">
-                                  <div className="stat-label">Txs</div>
-                                  <div className="stat-value">{formatNumber(tok.buy_count + tok.sell_count)}</div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
                       </div>
                     )}
                   </div>

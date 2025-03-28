@@ -195,6 +195,15 @@ const tokensSlice = createSlice({
     },
     setInitialLoadComplete: (state) => {
       state.initialLoad = false;
+    },
+    preloadTokensData: (state, action: PayloadAction<{newestTokens: ApiToken[], recentTokens: ApiToken[]}>) => {
+      // Mettre à jour les données directement depuis les données préchargées
+      state.newestTokens = action.payload.newestTokens;
+      state.olderTokens = action.payload.recentTokens.filter(token => 
+        !state.newestTokens.some(newToken => newToken.id === token.id)
+      );
+      state.loading = false;
+      state.error = null;
     }
   },
   extraReducers: (builder) => {
@@ -258,7 +267,7 @@ const tokensSlice = createSlice({
   }
 });
 
-export const { setConfidenceFilter, clearNewTokenHighlight, setInitialLoadComplete } = tokensSlice.actions;
+export const { setConfidenceFilter, clearNewTokenHighlight, setInitialLoadComplete, preloadTokensData } = tokensSlice.actions;
 
 // For dispatching the store later
 let store: any;
