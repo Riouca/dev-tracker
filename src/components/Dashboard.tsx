@@ -87,11 +87,12 @@ export function Dashboard() {
       setLoading(false)
       setLastUpdated(lastDashboardUpdate || new Date())
       
-      // If data is older than 5 minutes, trigger a silent refresh
+      // If data is older than 2 hours, trigger a silent refresh (increased from 5 minutes)
       const now = new Date()
-      const isFresh = lastDashboardUpdate && (now.getTime() - lastDashboardUpdate.getTime() < 5 * 60 * 1000)
+      const isFresh = lastDashboardUpdate && (now.getTime() - lastDashboardUpdate.getTime() < 2 * 60 * 60 * 1000)
       
       if (!isFresh && !silentlyUpdating) {
+        console.log('Data is older than 2 hours, refreshing in background')
         silentlyLoadData()
       }
     }

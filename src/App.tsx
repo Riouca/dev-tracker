@@ -45,10 +45,10 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,    // Don't refetch when window is focused
-      refetchOnMount: true,           // Refetch on mount if stale
-      retry: 1,                      // Only retry failed queries once
-      staleTime: 1000 * 60,           // Data considered stale after 1 minute
-      gcTime: 1000 * 60 * 10,         // Keep unused data in cache for 10 minutes
+      refetchOnMount: true,          // Refetch on mount by default (individual queries can override)
+      retry: 2,                       // Retry failed queries twice
+      staleTime: 1000 * 60 * 60,      // Data considered stale after 1 hour by default
+      gcTime: 1000 * 60 * 60 * 2,     // Keep unused data in cache for 2 hours
       networkMode: 'online',          // Only make requests when online
     },
   },

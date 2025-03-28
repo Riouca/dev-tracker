@@ -52,8 +52,11 @@ export const useTopCreators = (
   return useQuery({
     queryKey: ['top-creators', limit, sortBy, forceRefresh],
     queryFn: () => findTopCreators(limit, sortBy, forceRefresh, 125), // 125 tokens pour extraire 100 devs uniques
-    staleTime: 5400000, // 90 minutes - longer stale time for top creators
-    refetchInterval: 5400000, // 90 minutes between refetch
+    staleTime: 14400000, // 4 heures - aligned with Redis cache expiry (3 hours + margin)
+    refetchInterval: 14400000, // 4 heures between refetch
+    retry: 3, // Retry 3 times if the request fails
+    refetchOnWindowFocus: false, // Don't refetch when window is focused
+    refetchOnMount: false, // Don't refetch on mount to avoid unwanted API calls
     ...options
   });
 };
