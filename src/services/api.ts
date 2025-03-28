@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Use the proxy server
-const PROXY_BASE_URL = 'http://localhost:4000/api';
+const PROXY_BASE_URL = '/api';
 const API_BASE_URL = 'https://api.odin.fun/v1';
 
 export interface Token {
