@@ -4776,19 +4776,20 @@ h1 {
 }
 
 .recent-tokens-container .creator-avatar {
-  width: 45px; /* Increased from 40px */
-  height: 45px; /* Increased from 40px */
-  border-radius: 50%;
+  width: 90px;
+  height: 90px;
+  border-radius: 0.35rem;
   overflow: hidden;
+  border-color: var(--color-card);
   flex-shrink: 0;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
+  transform: scale(1.2); 
 }
 
 .recent-tokens-container .creator-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transform: scale(1.1); /* Zoom l'image légèrement pour mieux remplir le cercle */
 }
 
 .recent-tokens-container .creator-avatar-placeholder {
@@ -4799,7 +4800,7 @@ h1 {
   justify-content: center;
   background-color: var(--color-surface-hover);
   color: var(--color-text);
-  font-size: 1.25rem;
+  font-size: 1.8rem; /* Augmenté pour correspondre au zoom des images */
   font-weight: 600;
 }
 
@@ -4981,8 +4982,9 @@ h1 {
 }
 
 .recent-tokens-container .creator-summary .creator-avatar {
-  width: 30px;
-  height: 30px;
+  width: 45px; /* Augmenté de 35px à 45px */
+  height: 45px; /* Augmenté de 35px à 45px */
+  align-self: center;
 }
 
 .recent-tokens-container .creator-summary .creator-name {
@@ -5943,8 +5945,9 @@ h1 {
   }
 
   .creator-card .creator-avatar {
-    width: 40px;
-    height: 40px;
+    width: 80px;
+    height: 80px;
+    transform: scale(1.2);
     min-width: 40px;
   }
 
@@ -6085,6 +6088,11 @@ h1 {
     width: 100% !important;
     max-width: 100% !important;
   }
+  .creator-avatar{
+    width: 60px;
+    height: 60px;
+    min-width: 32px;
+  }
 }
 
 /* Extra specific styles for phones smaller than 400px */
@@ -6098,8 +6106,8 @@ h1 {
   
   .creator-card .creator-avatar,
   .recent-tokens-container .creator-avatar {
-    width: 32px;
-    height: 32px;
+    width: 45px;
+    height: 45px;
     min-width: 32px;
   }
   
@@ -6166,4 +6174,10 @@ h1 {
     transform: scale(0.95);
     box-shadow: 0 0 0 0 rgba(22, 199, 132, 0);
   }
+}
+
+.recent-tokens-container .creator-summary .creator-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
