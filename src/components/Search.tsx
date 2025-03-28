@@ -246,7 +246,7 @@ function Search() {
           <div className="search-result token-result">
             <div className="token-full-result">
               {/* Import the token display structure similar to RecentTokens */}
-              <div className="token-card">
+              <div className={`token-card ${!token.is_active ? 'inactive' : 'active'}`}>
                 <div className="token-header">
                   <div className="token-name-section">
                     <div className="token-icon">
@@ -294,6 +294,11 @@ function Search() {
                         <span className="price-neutral">24h: 0.00%</span>
                       )}
                     </div>
+                    {!token.is_active && (
+                      <div className="inactive-reason">
+                        ⚠️ INACTIVE TOKEN ⚠️
+                      </div>
+                    )}
                   </div>
                 </div>
                 

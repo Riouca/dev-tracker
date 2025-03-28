@@ -279,7 +279,7 @@ export function RecentTokens() {
             {filteredTokens.map(({ token, creator }) => (
               <div 
                 key={token.id} 
-                className={`creator-card ${expandedCreators.has(`${creator?.principal}-${token.id}`) ? 'expanded' : ''} ${newTokenIds.includes(token.id) ? 'new-token-highlight' : ''}`}
+                className={`creator-card ${expandedCreators.has(`${creator?.principal}-${token.id}`) ? 'expanded' : ''} ${newTokenIds.includes(token.id) ? 'new-token-highlight' : ''} ${!token.is_active ? 'inactive' : 'active'}`}
               >
                 <div className="creator-header" 
                   onClick={() => window.open(`https://odin.fun/token/${token.id}`, '_blank')}

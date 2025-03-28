@@ -281,7 +281,10 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
   }
 
   return (
-    <div className={`creator-card ${isExpanded ? 'expanded' : ''}`}>
+    <div 
+      className={`creator-card ${isExpanded ? 'expanded' : ''} ${creator.successRate < 50 ? 'inactive' : 'active'}`} 
+      onClick={toggleExpand}
+    >
       <div className="creator-header-wrapper" title="Click to expand developer details">
         <div className="creator-header" onClick={toggleExpand}>
           <div className="creator-info">

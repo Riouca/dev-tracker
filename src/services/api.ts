@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Use the proxy server
-const PROXY_BASE_URL = '/api';
+const PROXY_BASE_URL = 'http://localhost:4000/api';
 const API_BASE_URL = 'https://api.odin.fun/v1';
 
 export interface Token {
@@ -219,6 +219,9 @@ export const formatMarketcap = (marketcap: number, inUSD = false): string => {
 
 // Determine if a token is active based on price and other factors
 export const isTokenActive = (token: Token): boolean => {
+  // Check if token is priced too low
+  const inactiveThreshold = 0.25; // 0.25 sats per token
+  
   // Set is_active property
   if (token.price <= 0 || !token.trading) {
     token.is_active = false;
@@ -228,12 +231,20 @@ export const isTokenActive = (token: Token): boolean => {
     return false;
   }
   
-  // Calculate days since creation
+  // Calculate hours since creation
   const createdDate = new Date(token.created_time);
   const now = new Date();
-  const daysSinceCreation = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
+  const hoursSinceCreation = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
   
-  // Check if token has some trading activity based on days since creation
+  // Check if token price is below threshold and token is older than 1 hour
+  if (token.price_in_sats !== undefined && token.price_in_sats < inactiveThreshold && hoursSinceCreation > 1) {
+    token.is_active = false;
+    token.inactive_reason = 'Price too low';
+    return false;
+  }
+  
+  // Check if token has trading activity based on days since creation
+  const daysSinceCreation = hoursSinceCreation / 24;
   if (daysSinceCreation > 2 && token.volume < 0.00001) {
     token.is_active = false;
     token.inactive_reason = 'No trading activity';
@@ -242,6 +253,7 @@ export const isTokenActive = (token: Token): boolean => {
   
   // Token is active if it passed all checks
   token.is_active = true;
+  token.inactive_reason = '';
   return true;
 };
 
