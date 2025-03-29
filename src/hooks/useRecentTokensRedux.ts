@@ -4,8 +4,6 @@ import { fetchNewestTokens, fetchOlderTokens, processTokensWithCreators, setConf
 import { formatLastUpdated } from '../utils/formatters';
 import axios from 'axios';
 
-// Import TokenWithCreator interface
-import type { TokenWithCreator } from '../redux/slices/tokensSlice';
 
 const LOCAL_STORAGE_KEYS = {
   NEWEST_TOKENS: 'recentPage_newestTokens',

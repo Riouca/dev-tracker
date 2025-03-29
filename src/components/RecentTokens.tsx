@@ -2,11 +2,8 @@ import { useState, useEffect } from 'react'
 import { 
   getUserImageUrl, 
   getTokenImageUrl, 
-  formatVolume, 
-  formatMarketcap,
   getBTCPrice,
   getRarityLevel,
-  Token,
   formatTokenVolumeDisplay,
   formatTokenMarketcapDisplay
 } from '../services/api'
