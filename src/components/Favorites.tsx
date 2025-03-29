@@ -434,7 +434,6 @@ export function Favorites() {
       {loading ? (
         <div className="loading">
           <div className="loading-spinner"></div>
-          <p className="loading-text">Loading favorites...</p>
         </div>
       ) : error ? (
         <div className="error">

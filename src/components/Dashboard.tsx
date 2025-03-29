@@ -1,5 +1,5 @@
 import { useState, useEffect, ChangeEvent, useContext, useRef } from 'react'
-import { CreatorPerformance, CreatorSortOption } from '../services/api'
+import { CreatorPerformance, CreatorSortOption, processTokensIntoCreators, processTokens } from '../services/api'
 import CreatorCard from './CreatorCard'
 import { PreloadContext } from '../App'
 import { useTopCreators } from '../hooks/useTokenQueries'
@@ -119,21 +119,55 @@ export function Dashboard() {
   useEffect(() => {
     if (preloadedData && preloadedData.length > 0) {
       console.log('Using preloaded dashboard data')
-      setDisplayedCreators(sortCreators(preloadedData, sortDirection, sortBy))
-      setLoading(false)
-      setLastUpdated(lastDashboardUpdate || new Date())
+      
+      // Vérifie si les scores de confiance sont correctement calculés
+      const needsRecalculation = preloadedData.some(creator => 
+        creator.confidenceScore === undefined || 
+        creator.tokens.some(token => token.is_active === undefined)
+      );
+      
+      if (needsRecalculation) {
+        console.log('Recalculating confidence scores for preloaded data');
+        // Collecte tous les tokens des créateurs
+        const allTokens = preloadedData.flatMap(creator => creator.tokens || []);
+        
+        // Traite les tokens pour mettre à jour les statuts d'activité et prix en sats
+        const processedTokens = processTokens(allTokens);
+        
+        // Recalcule les scores de confiance
+        processTokensIntoCreators(processedTokens)
+          .then(recalculatedCreators => {
+            // Map les données recalculées aux créateurs existants pour préserver l'ordre
+            const updatedCreators = preloadedData.map(creator => {
+              const recalculated = recalculatedCreators.find(c => c.principal === creator.principal);
+              return recalculated || creator;
+            });
+            
+            setDisplayedCreators(sortCreators(updatedCreators, sortDirection, sortBy));
+            updateDashboardData(updatedCreators); // Met à jour le context avec les données recalculées
+          })
+          .catch(err => {
+            console.error('Error recalculating confidence scores:', err);
+            setDisplayedCreators(sortCreators(preloadedData, sortDirection, sortBy));
+          });
+      } else {
+        setDisplayedCreators(sortCreators(preloadedData, sortDirection, sortBy));
+      }
+      
+      setLoading(false);
+      setLastUpdated(lastDashboardUpdate || new Date());
       
       // If data is older than 2 hours, trigger a silent refresh (increased from 5 minutes)
-      const now = new Date()
-      const isFresh = lastDashboardUpdate && (now.getTime() - lastDashboardUpdate.getTime() < 2 * 60 * 60 * 1000)
+      const now = new Date();
+      const isFresh = lastDashboardUpdate && (now.getTime() - lastDashboardUpdate.getTime() < 2 * 60 * 60 * 1000);
       
       if (!isFresh && !silentlyUpdating) {
-        console.log('Data is older than 2 hours, refreshing in background')
-        silentlyLoadData()
+        console.log('Data is older than 2 hours, refreshing in background');
+        silentlyLoadData();
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps - silentlyLoadData intentionally omitted to avoid infinite loops
-  }, [preloadedData, lastDashboardUpdate, sortDirection, sortBy, silentlyUpdating])
+  }, [preloadedData, lastDashboardUpdate, sortDirection, sortBy, silentlyUpdating]);
 
   // Update creators when React Query data changes
   useEffect(() => {
@@ -194,20 +228,18 @@ export function Dashboard() {
 
   // Update displayed creators when search query changes
   useEffect(() => {
-    // Éviter le traitement si nous n'avons pas de données ou pas de requête
-    if (!displayedCreators.length || !searchQuery) {
-      return;
-    }
-    
-    // Debounce search filtering operations
     const searchTimer = setTimeout(() => {
-      console.log('Filtering creators with query:', searchQuery);
-      filterCreators();
+      if (searchQuery.trim() === '') {
+        // Si la recherche est vide, réinitialiser avec tous les développeurs triés correctement
+        const dataToSort = creators.length > 0 ? creators : preloadedData;
+        setDisplayedCreators(sortCreators(dataToSort, sortDirection, sortBy));
+      } else {
+        filterCreators();
+      }
     }, 150);
     
     return () => clearTimeout(searchTimer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, displayedCreators]);
+  }, [searchQuery, creators, preloadedData, sortDirection, sortBy]);
 
   // Update paginated creators when displayedCreators or currentPage changes
   useEffect(() => {
@@ -326,7 +358,7 @@ export function Dashboard() {
 
   const filterCreators = () => {
     // Get current data source
-    const dataToFilter = creators.length > 0 ? creators : preloadedData
+    const dataToFilter = creators.length > 0 ? creators : preloadedData;
     
     // Apply search filter if search query exists
     let filtered = dataToFilter;
@@ -343,6 +375,9 @@ export function Dashboard() {
         ))
       );
     }
+    
+    // Toujours définir displayedCreators, même si filtered est vide
+    // Cela garantit que lorsque searchQuery est effacé, nous reviendrons à tous les développeurs
     setDisplayedCreators(filtered);
     console.log(`Filtered to ${filtered.length} creators`);
     
@@ -586,8 +621,8 @@ export function Dashboard() {
         </div>
       ) : (!displayedCreators.length && !paginatedCreators.length && !loading) ? (
         <div className="empty-state">
-          <p>No developers found matching your search criteria.</p>
-          <p>Try adjusting your search.</p>
+          <p>No developers or tokens found matching "{searchQuery}"</p>
+          <p>Try adjusting your search or clear it to see all developers.</p>
         </div>
       ) : (
         <>

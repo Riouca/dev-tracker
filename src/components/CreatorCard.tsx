@@ -201,7 +201,7 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
   const formatVolumeDisplay = () => {
     if (showUSD) {
       // Show in USD
-      if (usdPrice && creator.btcVolume) {
+      if (usdPrice && creator.btcVolume !== undefined) {
         const usdVolume = creator.btcVolume * usdPrice;
         
         if (usdVolume >= 1000000) {
@@ -212,22 +212,73 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
           return `$${usdVolume.toFixed(0)}`;
         }
       } else {
+        // Fallback using totalVolume
         return formatVolume(creator.totalVolume, true);
       }
     } else {
       // Show in BTC
-      if (creator.btcVolume) {
+      if (creator.btcVolume !== undefined) {
         if (creator.btcVolume >= 1000) {
           return `${(creator.btcVolume / 1000).toFixed(1)}K BTC`;
         } else if (creator.btcVolume >= 1) {
-          return `${creator.btcVolume.toFixed(1)} BTC`;
+          return `${creator.btcVolume.toFixed(2)} BTC`;
         } else if (creator.btcVolume >= 0.001) {
-          return `${creator.btcVolume.toFixed(3)} BTC`;
+          return `${creator.btcVolume.toFixed(5)} BTC`;
         } else {
-          return `${(creator.totalVolume / 1000000 / 1000).toFixed(2)}M sats`;
+          return `${(creator.btcVolume * 100000000).toFixed(0)} sats`;
         }
       } else {
+        // Fallback using totalVolume
         return formatVolume(creator.totalVolume, false);
+      }
+    }
+  };
+
+  // Format marketcap display
+  const formatMarketcapDisplay = () => {
+    if (showUSD) {
+      // Show in USD
+      if (creator.generatedMarketcapUSD && creator.generatedMarketcapUSD > 0) {
+        const usdValue = creator.generatedMarketcapUSD;
+        
+        if (usdValue >= 1000000) {
+          return `$${(usdValue / 1000000).toFixed(1)}M`;
+        } else if (usdValue >= 1000) {
+          return `$${(usdValue / 1000).toFixed(1)}K`;
+        } else {
+          return `$${usdValue.toFixed(0)}`;
+        }
+      } else if (creator.generatedMarketcapBTC !== undefined) {
+        // Utilisez directement generatedMarketcapBTC qui est déjà en BTC
+        const usdValue = creator.generatedMarketcapBTC * (usdPrice || 88888);
+        
+        if (usdValue >= 1000000) {
+          return `$${(usdValue / 1000000).toFixed(1)}M`;
+        } else if (usdValue >= 1000) {
+          return `$${(usdValue / 1000).toFixed(1)}K`;
+        } else {
+          return `$${usdValue.toFixed(0)}`;
+        }
+      } else {
+        return "$0";
+      }
+    } else {
+      // Show in BTC
+      if (creator.generatedMarketcapBTC !== undefined) {
+        // Utilisez directement generatedMarketcapBTC qui est déjà en BTC
+        const btcValue = creator.generatedMarketcapBTC;
+        
+        if (btcValue >= 1000) {
+          return `${(btcValue / 1000).toFixed(1)}K BTC`;
+        } else if (btcValue >= 1) {
+          return `${btcValue.toFixed(2)} BTC`;
+        } else if (btcValue >= 0.001) {
+          return `${btcValue.toFixed(5)} BTC`;
+        } else {
+          return `${(btcValue * 100000000).toFixed(0)} sats`;
+        }
+      } else {
+        return "0 BTC";
       }
     }
   };
@@ -235,7 +286,8 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
   // Format token volume display
   const formatTokenVolumeDisplay = (volume: number) => {
     if (showUSD && usdPrice) {
-      const btcVolume = volume / 100000000 / 1000; // Convert to BTC and divide by 1000
+      // Diviser par 1000 une fois de plus pour obtenir la valeur correcte
+      const btcVolume = volume / 100000000 / 1000; // Déjà divisé par 1000 dans convertVolumeToBTC
       const usdVolume = btcVolume * usdPrice;
       
       if (usdVolume >= 1000000) {
@@ -253,7 +305,8 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
   // Format token marketcap display
   const formatTokenMarketcapDisplay = (marketcap: number) => {
     if (showUSD && usdPrice) {
-      const btcMarketcap = marketcap / 100000000 / 1000; // Convert to BTC and divide by 1000
+      // Diviser par 1000 une fois de plus pour obtenir la valeur correcte
+      const btcMarketcap = marketcap / 100000000 / 1000; // Déjà divisé par 1000 dans convertMarketcapToBTC
       const usdMarketcap = btcMarketcap * usdPrice;
       
       if (usdMarketcap >= 1000000) {
@@ -313,12 +366,12 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
                 <div className="confidence-score">
                   <span className="metric-label">Confidence:</span> 
                   <span className={rarityColor}>
-                    {creator.confidenceScore.toFixed(1)}%
+                    {creator.confidenceScore.toFixed(2)}%
                   </span>
                 </div>
                 <div className="creator-last-token">
-                  <span className="metric-label">Last token:</span> 
-                  <span className="token-date">{lastTokenDate}</span>
+                  <span className="metric-label">Last Token:</span> 
+                  <span className="last-token-date">{lastTokenDate}</span>
                 </div>
                 <div className="creator-trades">
                   <span className="metric-label">Total trades:</span> 
@@ -326,7 +379,9 @@ function CreatorCard({ creator, onUpdate, btcPrice }: CreatorCardProps) {
                 </div>
                 <div className="creator-avg-price">
                   <span className="metric-label">Generated MCap:</span> 
-                  <span className="avg-price">${formatNumber(Math.round(creator.generatedMarketcapUSD || 0))}</span>
+                  <span className="avg-price">
+                    {formatMarketcapDisplay()}
+                  </span>
                 </div>
               </div>
             </div>

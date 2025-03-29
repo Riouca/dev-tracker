@@ -212,7 +212,6 @@ function Search() {
         {loading && (
           <div className="search-loading">
             <div className="spinner"></div>
-            <p>Searching...</p>
           </div>
         )}
         

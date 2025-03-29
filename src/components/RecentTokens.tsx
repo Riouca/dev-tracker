@@ -6,6 +6,9 @@ import {
   formatMarketcap,
   getBTCPrice,
   getRarityLevel,
+  Token,
+  formatTokenVolumeDisplay,
+  formatTokenMarketcapDisplay
 } from '../services/api'
 import { formatNumber, getTimeSince, formatDeveloperHoldings } from '../utils/formatters'
 import { useRecentTokensRedux } from '../hooks/useRecentTokensRedux'
@@ -176,40 +179,13 @@ export function RecentTokens() {
     fetchBTCPrice()
   }, []);
 
-  // Format token volume display
-  const formatTokenVolumeDisplay = (volume: number) => {
-    if (showUSD && usdPrice) {
-      const btcVolume = volume / 100000000 / 1000; // Convert to BTC and divide by 1000
-      const usdVolume = btcVolume * usdPrice;
-      
-      if (usdVolume >= 1000000) {
-        return `$${(usdVolume / 1000000).toFixed(1)}M`;
-      } else if (usdVolume >= 1000) {
-        return `$${(usdVolume / 1000).toFixed(1)}K`;
-      } else {
-        return `$${usdVolume.toFixed(0)}`;
-      }
-    } else {
-      return formatVolume(volume, false);
-    }
+  // format token volume and marketcap using the utility functions
+  const formatVolumeWithUsd = (volume: number) => {
+    return formatTokenVolumeDisplay(volume, showUSD, usdPrice || undefined);
   };
 
-  // Format token marketcap display
-  const formatTokenMarketcapDisplay = (marketcap: number) => {
-    if (showUSD && usdPrice) {
-      const btcMarketcap = marketcap / 100000000 / 1000; // Convert to BTC and divide by 1000
-      const usdMarketcap = btcMarketcap * usdPrice;
-      
-      if (usdMarketcap >= 1000000) {
-        return `$${(usdMarketcap / 1000000).toFixed(1)}M`;
-      } else if (usdMarketcap >= 1000) {
-        return `$${(usdMarketcap / 1000).toFixed(1)}K`;
-      } else {
-        return `$${usdMarketcap.toFixed(0)}`;
-      }
-    } else {
-      return formatMarketcap(marketcap, false);
-    }
+  const formatMarketcapWithUsd = (marketcap: number) => {
+    return formatTokenMarketcapDisplay(marketcap, showUSD, usdPrice || undefined);
   };
 
   // Get confidence score color class based on score
@@ -339,7 +315,7 @@ export function RecentTokens() {
                         </div>
                         <div className="token-created">
                           <span className="metric-label">Created:</span> 
-                          <span>{getTimeSince(token.created_time)}</span>
+                          <span>{token.created_time ? getTimeSince(token.created_time) : 'Unknown'}</span>
                         </div>
                       </div>
                       {/* Social links icons - always render the container even if empty */}
@@ -404,12 +380,12 @@ export function RecentTokens() {
                   </div>
                   <div className="creator-stat">
                     <div className="stat-value volume-value" onClick={() => setShowUSD(!showUSD)}>
-                      {formatTokenVolumeDisplay(token.volume)}
+                      {formatVolumeWithUsd(token.volume)}
                     </div>
                     <div className="stat-label">Volume {showUSD ? '(USD)' : '(BTC)'}</div>
                   </div>
                   <div className="creator-stat">
-                    <div className="stat-value">{formatTokenMarketcapDisplay(token.marketcap)}</div>
+                    <div className="stat-value">{formatMarketcapWithUsd(token.marketcap)}</div>
                     <div className="stat-label">Marketcap</div>
                   </div>
                   <div className="creator-stat">
@@ -456,7 +432,7 @@ export function RecentTokens() {
                           <div className="confidence-score">
                             <span className="metric-label">Confidence:</span> 
                             <span className={getRarityColor(creator.confidenceScore)}>
-                              {creator.confidenceScore.toFixed(1)}%
+                              {creator.confidenceScore.toFixed(2)}%
                             </span>
                           </div>
                           <div className="creator-tokens-count">
@@ -527,7 +503,7 @@ export function RecentTokens() {
                                 <div className="token-stats">
                                   <div className="token-stat">
                                     <div className="stat-label">Volume</div>
-                                    <div className="stat-value">{formatTokenVolumeDisplay(currentTokenData.volume)}</div>
+                                    <div className="stat-value">{formatVolumeWithUsd(currentTokenData.volume)}</div>
                                   </div>
                                   <div className="token-stat">
                                     <div className="stat-label">Holders</div>
@@ -535,7 +511,7 @@ export function RecentTokens() {
                                   </div>
                                   <div className="token-stat">
                                     <div className="stat-label">MCap</div>
-                                    <div className="stat-value">{formatTokenMarketcapDisplay(currentTokenData.marketcap)}</div>
+                                    <div className="stat-value">{formatMarketcapWithUsd(currentTokenData.marketcap)}</div>
                                   </div>
                                   <div className="token-stat">
                                     <div className="stat-label">Txs</div>

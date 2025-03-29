@@ -34,22 +34,63 @@ export function formatNumber(num: number): string {
  * Get time elapsed since a date
  */
 export function getTimeSince(dateInput: string | Date): string {
-  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHour = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHour / 24)
+  // Si c'est vide ou null, retourner 'Unknown'
+  if (!dateInput) {
+    return 'Unknown';
+  }
+  
+  let date: Date;
+  
+  // Gérer différents formats d'entrée
+  if (typeof dateInput === 'string') {
+    // Si c'est un format ISO (YYYY-MM-DDTHH:MM:SS.sssZ)
+    const isoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
+    if (isoPattern.test(dateInput)) {
+      try {
+        date = new Date(dateInput);
+      } catch (error) {
+        return 'Unknown';
+      }
+    }
+    // Vérifier si c'est un ID de token (contient souvent des caractères non-date)
+    else if (dateInput.includes('-') && dateInput.length > 20) {
+      return 'Unknown';
+    }
+    else {
+      try {
+        date = new Date(dateInput);
+      } catch (error) {
+        return 'Unknown';
+      }
+    }
+    
+    // Vérifier si la date est valide
+    if (isNaN(date.getTime())) {
+      return 'Unknown';
+    }
+  } else {
+    date = dateInput;
+    // Vérifier si la date est valide
+    if (isNaN(date.getTime())) {
+      return 'Unknown';
+    }
+  }
+  
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
 
   if (diffDay > 0) {
-    return `${diffDay} day${diffDay > 1 ? 's' : ''} ago`
+    return `${diffDay} day${diffDay > 1 ? 's' : ''} ago`;
   } else if (diffHour > 0) {
-    return `${diffHour} hour${diffHour > 1 ? 's' : ''} ago`
+    return `${diffHour} hour${diffHour > 1 ? 's' : ''} ago`;
   } else if (diffMin > 0) {
-    return `${diffMin} minute${diffMin > 1 ? 's' : ''} ago`
+    return `${diffMin} minute${diffMin > 1 ? 's' : ''} ago`;
   } else {
-    return 'just now'
+    return 'just now';
   }
 }
 

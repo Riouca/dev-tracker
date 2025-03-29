@@ -1,8 +1,39 @@
 import axios from 'axios';
-
 // Use the proxy server
 const PROXY_BASE_URL = '/api';
 const API_BASE_URL = 'https://api.odin.fun/v1';
+// Redis cache helpers
+
+
+// Get data from cache
+export async function getFromCache<T>(key: string): Promise<T | null> {
+  try {
+    const response = await axios.get(`${PROXY_BASE_URL}/cache/${key}`);
+    if (response.data && response.data.data) {
+      return response.data.data as T;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error getting data from cache for key ${key}:`, error);
+    return null;
+  }
+}
+
+// Set data in cache
+export async function setInCache(key: string, data: any, ttl: number = 3600): Promise<boolean> {
+  try {
+    const response = await axios.post(`${PROXY_BASE_URL}/cache/${key}`, {
+      data,
+      ttl
+    });
+    return response.status === 200;
+  } catch (error) {
+    console.error(`Error setting data in cache for key ${key}:`, error);
+    return false;
+  }
+}
+
+
 
 export interface Token {
   id: string;
@@ -137,14 +168,14 @@ export const convertPriceToSats = (rawPrice: number): number => {
 
 // Convert raw volume to BTC
 export const convertVolumeToBTC = (volume: number): number => {
-  // Raw volume is in sats, divide by 10^8 to get BTC
-  return volume / 100000000;
+  // Raw volume is in sats, divide by 10^8 to get BTC and by 1000 for correct scaling
+  return volume / 100000000 / 1000;
 };
 
 // Convert raw marketcap to BTC
 export const convertMarketcapToBTC = (marketcap: number): number => {
-  // Raw marketcap is in sats, divide by 10^8 to get BTC
-  return marketcap / 100000000;
+  // Raw marketcap is in sats, divide by 10^8 to get BTC and by 1000 for correct scaling
+  return marketcap / 100000000 / 1000;
 };
 
 // Get current BTC price in USD
@@ -161,8 +192,7 @@ export const convertBTCToUSD = async (btcAmount: number): Promise<number> => {
 
 // Format volume for display
 export const formatVolume = (volume: number, inUSD = false): string => {
-  // Divide by 1000 to get correct value
-  const btcVolume = convertVolumeToBTC(volume) / 1000;
+  const btcVolume = convertVolumeToBTC(volume); // Already includes division by 1000
   
   if (inUSD) {
     // For USD display
@@ -180,19 +210,18 @@ export const formatVolume = (volume: number, inUSD = false): string => {
     if (btcVolume >= 1000) {
       return `${(btcVolume / 1000).toFixed(1)}K BTC`;
     } else if (btcVolume >= 1) {
-      return `${btcVolume.toFixed(1)} BTC`;
+      return `${btcVolume.toFixed(2)} BTC`;
     } else if (btcVolume >= 0.001) {
-      return `${btcVolume.toFixed(3)} BTC`;
+      return `${btcVolume.toFixed(5)} BTC`;
     } else {
-      return `${(volume / 1000000 / 1000).toFixed(2)}M sats`;
+      return `${(btcVolume * 100000000).toFixed(0)} sats`;
     }
   }
 };
 
 // Format marketcap for display
 export const formatMarketcap = (marketcap: number, inUSD = false): string => {
-  // Divide by 1000 to get correct value
-  const btcMarketcap = convertMarketcapToBTC(marketcap) / 1000;
+  const btcMarketcap = convertMarketcapToBTC(marketcap); // Already includes division by 1000
   
   if (inUSD) {
     // For USD display
@@ -210,10 +239,50 @@ export const formatMarketcap = (marketcap: number, inUSD = false): string => {
     if (btcMarketcap >= 1000) {
       return `${(btcMarketcap / 1000).toFixed(1)}K BTC`;
     } else if (btcMarketcap >= 1) {
-      return `${btcMarketcap.toFixed(1)} BTC`;
+      return `${btcMarketcap.toFixed(2)} BTC`;
+    } else if (btcMarketcap >= 0.001) {
+      return `${btcMarketcap.toFixed(5)} BTC`;
     } else {
-      return `${btcMarketcap.toFixed(3)} BTC`;
+      return `${(btcMarketcap * 100000000).toFixed(0)} sats`;
     }
+  }
+};
+
+// Format token volume display
+export const formatTokenVolumeDisplay = (volume: number, showUSD = false, usdPrice = 88888): string => {
+  if (showUSD) {
+    // Diviser par 1000 une fois de plus pour obtenir la valeur correcte
+    const btcVolume = volume / 100000000 / 1000; // Déjà inclus dans convertVolumeToBTC
+    const usdVolume = btcVolume * usdPrice;
+    
+    if (usdVolume >= 1000000) {
+      return `$${(usdVolume / 1000000).toFixed(1)}M`;
+    } else if (usdVolume >= 1000) {
+      return `$${(usdVolume / 1000).toFixed(1)}K`;
+    } else {
+      return `$${usdVolume.toFixed(0)}`;
+    }
+  } else {
+    return formatVolume(volume, false);
+  }
+};
+
+// Format token marketcap display
+export const formatTokenMarketcapDisplay = (marketcap: number, showUSD = false, usdPrice = 88888): string => {
+  if (showUSD) {
+    // Diviser par 1000 une fois de plus pour obtenir la valeur correcte
+    const btcMarketcap = marketcap / 100000000 / 1000; // Déjà inclus dans convertMarketcapToBTC
+    const usdMarketcap = btcMarketcap * usdPrice;
+    
+    if (usdMarketcap >= 1000000) {
+      return `$${(usdMarketcap / 1000000).toFixed(1)}M`;
+    } else if (usdMarketcap >= 1000) {
+      return `$${(usdMarketcap / 1000).toFixed(1)}K`;
+    } else {
+      return `$${usdMarketcap.toFixed(0)}`;
+    }
+  } else {
+    return formatMarketcap(marketcap, false);
   }
 };
 
@@ -358,6 +427,22 @@ export const getCreatorTokens = async (principal: string, limit = 20, forceRefre
   }
 };
 
+// Calculate generated marketcap (total marketcap minus base minting cost of 0.025 BTC per token)
+export const calculateGeneratedMarketcap = (marketcap: number, tokenCount: number): number => {
+  // Le marketcap est déjà en BTC à ce stade (divisé par 100M et 1000)
+  // Le coût de base est de 0.025 BTC par token
+  const baseCostPerToken = 0.025; // En BTC directement
+  const totalBaseCost = baseCostPerToken * tokenCount;
+  
+  return Math.max(0, marketcap - totalBaseCost);
+};
+
+// Convert to USD
+export const convertToUSD = (btcAmount: number): number => {
+  // Use fixed BTC price value
+  return btcAmount * 88888;
+};
+
 // Calculate performance metrics for a token creator
 export const calculateCreatorPerformance = async (
   principal: string,
@@ -403,8 +488,6 @@ export const calculateCreatorPerformance = async (
     
     // Calculate success rate based on active tokens
     const successRate = tokens.length > 0 ? (activeTokens / tokens.length) * 100 : 0;
-    
-    // Nouvelle logique : calculer les scores individuels selon les nouvelles spécifications
     
     // Constantes pour les poids du score final
     const successWeight = 0.33;  // 33% weight for success rate
@@ -490,10 +573,10 @@ export const calculateCreatorPerformance = async (
     );
     const lastTokenCreated = sortedByCreationTime.length > 0 ? sortedByCreationTime[0].created_time : undefined;
     
-    // Calculate BTC volume for display (divide by 1000 to get correct value)
-    const btcVolume = convertVolumeToBTC(totalVolume) / 1000;
+    // Calculate BTC volume for display
+    const btcVolume = convertVolumeToBTC(totalVolume);
     
-    const creatorPerformance = {
+    const performance: CreatorPerformance = {
       principal,
       username: user.username,
       image: user.image,
@@ -502,14 +585,15 @@ export const calculateCreatorPerformance = async (
       totalVolume,
       btcVolume,
       successRate,
-      weightedScore: confidenceScore, // Keep weightedScore for compatibility, but use confidenceScore instead
+      weightedScore: confidenceScore, // Keep weightedScore for compatibility
       confidenceScore,
       totalHolders,
       totalTrades,
-      lastTokenCreated,
+      lastTokenCreated: lastTokenCreated || '',
       totalMarketcap,
       generatedMarketcapBTC: generatedMarketcap,
       generatedMarketcapUSD: generatedMarketcapUSD,
+      rank: 0, // Will be set later
       tokens: tokens.sort((a, b) => {
         const priceA = a.price_in_sats || a.price / 1000;
         const priceB = b.price_in_sats || b.price / 1000;
@@ -517,7 +601,7 @@ export const calculateCreatorPerformance = async (
       }).slice(0, 25)
     };
     
-    return creatorPerformance;
+    return performance;
   } catch (error) {
     console.error(`Error calculating performance for creator ${principal}:`, error);
     return null;
@@ -892,29 +976,114 @@ export const processTokensIntoCreators = async (tokens: Token[]): Promise<Creato
       const totalVolume = creatorTokens.reduce((sum, token) => sum + (token.volume || 0), 0);
       
       // Calculate BTC volume (convert from sats)
-      const btcVolume = totalVolume / 100000000;
+      const btcVolume = convertVolumeToBTC(totalVolume);
       
-      // Calculate confidence score based on success rate, active tokens, and volume
-      const volumeWeight = Math.min(1, btcVolume / 0.5); // Max out at 0.5 BTC volume
-      const activeTokensWeight = Math.min(1, activeTokens / 5); // Max out at 5 active tokens
-      const confidenceScore = Math.round(
-        (successRate * 0.5) + // 50% of score based on success rate
-        (volumeWeight * 30) + // 30% of score based on volume
-        (activeTokensWeight * 20) // 20% of score based on number of active tokens
-      );
-      
-      // Get total marketcap and holder count
-      const totalMarketcap = creatorTokens.reduce((sum, token) => sum + (token.marketcap || 0), 0);
+      // Calculate total holders (combined total of all tokens)
       const totalHolders = creatorTokens.reduce((sum, token) => sum + (token.holder_count || 0), 0);
       
-      // Sort tokens by last activity
-      creatorTokens.sort((a, b) => {
-        return new Date(b.last_action_time || b.created_time).getTime() - 
-               new Date(a.last_action_time || a.created_time).getTime();
+      // Calculate total marketcap
+      const totalMarketcap = creatorTokens.reduce((sum, token) => {
+        // Convertir le marketcap en BTC
+        const tokenMarketcapInBtc = token.marketcap / 100000000 / 1000;
+        return sum + tokenMarketcapInBtc;
+      }, 0);
+      
+      // Constantes pour les poids du score final
+      const successWeight = 0.33;  // 33% weight for success rate
+      const volumeWeight = 0.33;   // 33% weight for volume
+      const holdersWeight = 0.15;  // 15% weight for holders
+      const tradesWeight = 0.01;   // 1% weight for trades
+      const mcapWeight = 0.18;     // 18% weight for generated marketcap
+      
+      // Pour les calculs en USD, utiliser une valeur fixe pour le prix BTC
+      const btcPrice = 88888;
+      
+      // 1. Volume score: linear scale based on BTC volume in USD
+      // For volume: $0 = 0 points, $600,000 = 100 points (linear scale)
+      const maxVolumeUSD = 600000; // $600K for maximum score
+      const volumeInUSD = totalVolume / 100000000 * btcPrice;
+      const volumeScore = Math.min(100, (volumeInUSD / maxVolumeUSD) * 100);
+      
+      // 2. Holders score: linear scale based on total holder count
+      // For holders: 0 = 0 points, 600 = 100 points (linear scale)
+      const maxHolders = 600; // 600 holders for maximum score
+      const holdersScore = Math.min(100, (totalHolders / maxHolders) * 100);
+      
+      // Calculate total number of trades
+      const totalTrades = creatorTokens.reduce((sum, token) => {
+        // Use txn_count if available, otherwise fallback to buy_count + sell_count
+        const tokenTrades = token.txn_count || (token.buy_count + token.sell_count);
+        return sum + (tokenTrades || 0);
+      }, 0);
+      
+      // 3. Trades score: linear scale based on total transaction count
+      // For trades: 0 = 0 points, 6000 = 100 points (linear scale)
+      const maxTrades = 6000; // 6000 transactions for maximum score
+      const tradesScore = Math.min(100, (totalTrades / maxTrades) * 100);
+      
+      // 4. Generated marketcap score: difference between total marketcap and base (0.025 BTC per token)
+      const baseBtcMarketcapPerToken = 0.025;
+      const baseMarketcap = creatorTokens.length * baseBtcMarketcapPerToken;
+      const generatedMarketcap = Math.max(0, totalMarketcap - baseMarketcap);
+      
+      // Conversion to USD for score calculation
+      const generatedMarketcapUSD = generatedMarketcap * btcPrice;
+      
+      // 5. Marketcap score: linear scale based on generated marketcap over threshold
+      // For marketcap: $0 = 0 points, $100,000 = 100 points (linear scale)
+      const maxMarketcapUSD = 100000; // $100K for maximum score
+      const mcapScore = Math.min(100, (generatedMarketcapUSD / maxMarketcapUSD) * 100);
+      
+      // 6. Success rate with penalty for inactive tokens
+      let successScore = 0;
+      if (creatorTokens.length > 0) {
+        // Base success rate (active/total percentage)
+        const baseSuccessRate = (activeTokens / creatorTokens.length) * 100;
+        
+        // Bonus/Penalty system:
+        // Each active token gives +6 bonus points (increased to favor more active tokens)
+        // Each inactive token gives a penalty that starts at -2 and increases by -0.5 for each additional token
+        // For example: 2 inactive tokens = -2 + (-2-0.5) = -4.5 penalty
+        const activeBonus = activeTokens * 6;
+        
+        let inactivePenalty = 0;
+        const inactiveTokens = creatorTokens.length - activeTokens;
+        for (let i = 0; i < inactiveTokens; i++) {
+          inactivePenalty += 2 + (i * 0.5);
+        }
+        
+        // Calculate net bonus/penalty effect
+        const netEffect = activeBonus - inactivePenalty;
+        
+        // Apply to base success rate, but never below 0
+        successScore = Math.max(0, baseSuccessRate + netEffect);
+        
+        // Cap at 100
+        successScore = Math.min(100, successScore);
+        
+        // If no active tokens, use a more generous score based on token count
+        if (activeTokens === 0) {
+          // Start at 3 points for 0/1 and decrease by 0.5 per token
+          successScore = Math.max(0.5, 3 - (creatorTokens.length * 0.5));
+        }
+      }
+      
+      // Calculate weighted confidence score based on various metrics
+      const confidenceScore = Math.min(100, Math.max(0,
+        (successScore * successWeight) +
+        (volumeScore * volumeWeight) +
+        (holdersScore * holdersWeight) +
+        (tradesScore * tradesWeight) +
+        (mcapScore * mcapWeight)
+      ));
+      
+      // Sort tokens by creation time (newest first) for lastTokenCreated
+      const tokensByCreationTime = [...creatorTokens].sort((a, b) => {
+        return new Date(b.created_time).getTime() - new Date(a.created_time).getTime();
       });
       
-      // Get last token created
-      const lastTokenCreated = creatorTokens.length > 0 ? creatorTokens[0] : null;
+      // Get the newest token's creation time
+      const lastTokenCreated = tokensByCreationTime.length > 0 ? tokensByCreationTime[0].created_time : '';
       
       // Create the performance object
       const performance: CreatorPerformance = {
@@ -929,11 +1098,11 @@ export const processTokensIntoCreators = async (tokens: Token[]): Promise<Creato
         confidenceScore,
         weightedScore: confidenceScore, // For backward compatibility
         totalHolders,
-        totalTrades: 0, // Not calculated from cached data
-        lastTokenCreated: lastTokenCreated ? lastTokenCreated.id : '',
+        totalTrades,
+        lastTokenCreated,
         totalMarketcap,
-        generatedMarketcapBTC: totalMarketcap / 100000000, // Convert from sats to BTC
-        generatedMarketcapUSD: 0, // Not calculated from cached data
+        generatedMarketcapBTC: generatedMarketcap,
+        generatedMarketcapUSD: generatedMarketcapUSD,
         rank: 0, // Will be set later
         tokens: creatorTokens.sort((a, b) => {
           const priceA = a.price_in_sats || a.price / 1000;
@@ -964,5 +1133,38 @@ export const processTokensIntoCreators = async (tokens: Token[]): Promise<Creato
   } catch (error) {
     console.error('Error processing tokens into creators:', error);
     return [];
+  }
+};
+
+// Get tokens created by a specific user, sorted by creation date
+export const getUserCreatedTokens = async (principal: string, limit = 1): Promise<Token[]> => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/user/${principal}/created`, {
+      params: {
+        sort: 'created_time:desc',
+        page: 1,
+        limit
+      }
+    });
+    
+    const tokens = response.data.data || [];
+    return processTokens(tokens);
+  } catch (error) {
+    console.error(`Error fetching tokens created by ${principal}:`, error);
+    return [];
+  }
+};
+
+// Fetch specific token info from API with creation time
+export const getTokenInfo = async (tokenId: string): Promise<Token | null> => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/token/${tokenId}`);
+    if (response.data) {
+      return processTokens([response.data])[0];
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching token info for ${tokenId}:`, error);
+    return null;
   }
 }; 
